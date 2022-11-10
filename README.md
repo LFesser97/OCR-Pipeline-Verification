@@ -1,1 +1,0 @@
-# OCR-Pipeline-Verification
