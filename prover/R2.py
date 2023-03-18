@@ -891,6 +891,23 @@ class LSTMCell(nn.LSTM, DPBackSubstitution):
 
 class Linear(nn.Linear, DPBackSubstitution):
     def __init__(self, in_features, out_features, bias=True, prev_layer=None):
+        """
+        Linear layer with DeepPoly back substitution
+
+        Parameters
+        ----------
+        in_features : int
+            Number of input features/ dimension of the input
+
+        out_features : int
+            Number of output features/ dimension of the output
+
+        bias : bool
+            Whether to use bias or not
+
+        prev_layer : DPBackSubstitution
+            Information about the previous layer
+        """
         super(Linear, self).__init__(in_features, out_features, bias)
         self.prev_layer = prev_layer
         self.input_dp = None
@@ -898,6 +915,17 @@ class Linear(nn.Linear, DPBackSubstitution):
 
     @staticmethod
     def convert(layer, prev_layer=None, device=torch.device("cpu")):
+        """
+        Convert a PyTorch Linear layer to a DeepPoly Linear layer
+
+        Parameters
+        ----------
+        layer : nn.Linear
+            PyTorch Linear layer
+
+        prev_layer : DPBackSubstitution
+            Information about the previous layer
+        """
         l = Linear(
             layer.in_features, layer.out_features, layer.bias is not None, prev_layer
         )
@@ -906,6 +934,20 @@ class Linear(nn.Linear, DPBackSubstitution):
         return l
 
     def assign(self, weight, bias=None, device=torch.device("cpu")):
+        """
+        Assign weights and bias to the layer
+
+        Parameters
+        ----------
+        weight : torch.Tensor
+            Weight tensor
+
+        bias : torch.Tensor
+            Bias tensor
+
+        device : torch.device
+            Device to which the tensors should be moved
+        """
         assert weight.size() == torch.Size([self.in_features, self.out_features])
         assert bias is None or bias.size() == torch.Size([self.out_features])
         self.weight.data = weight.data.to(device).t()
@@ -915,6 +957,20 @@ class Linear(nn.Linear, DPBackSubstitution):
             self.bias.data = torch.zeros(self.out_features).to(device)
 
     def forward(self, prev_dp):
+        """
+        Forward pass of the layer for DeepPoly
+
+        Parameters
+        ----------
+        prev_dp : DeepPoly
+            DeepPoly object of the previous layer
+
+        Returns
+        -------
+        self.output_dp : DeepPoly
+            DeepPoly object of the current layer
+        """
+
         # Initial layer
         if self.prev_layer == None:
             self.input_dp = prev_dp
@@ -943,6 +999,63 @@ class Linear(nn.Linear, DPBackSubstitution):
         )
 
         return self.output_dp
+    
+
+class Normalization(Linear):
+    """
+    A class for the normalization layer that subtracts the mean
+    of a layer (without dividing by the standard deviation)
+    """
+    def __init__(self, in_features, prev_layer=None):
+        super(Normalization, self).__init__(in_features, in_features, True, prev_layer)
+
+    def assign(self, device=torch.device("cpu")):
+        """
+        Assign weights and bias to the layer
+
+        Parameters
+        ----------
+        device : torch.device
+            Device to which the tensors should be moved
+        """
+
+        # create a torch.Tensor of size (in_features, in_features)
+        # with all elements equal to identity - 1/in_features
+        weight = torch.eye(self.in_features) - torch.ones(self.in_features) / self.in_features
+
+        self.weight.data = weight.to(device).t()
+        self.bias.data = torch.zeros(self.out_features).to(device)
+
+    
+class Residual_Connections(Linear):
+    """
+    A class for the residual connections layer that adds the identity matrix
+
+    Note that the input to this layer consists of two vectors
+    of the same dimension (in_features)
+
+    The output of this layer is the element-wise sum of the two vectors
+    which is of dimension (in_features)
+    """
+    def __init__(self, in_features, prev_layer=None):
+        super(Residual_Connections, self).__init__(2 * in_features, in_features, True, prev_layer)
+
+    def assign(self, device=torch.device("cpu")):
+        """
+        Assign weights and bias to the layer
+
+        Parameters
+        ----------
+        device : torch.device
+            Device to which the tensors should be moved
+        """
+        
+        # create a torch.Tensor of size (in_features, 2 x in_features)
+        # equal to the identity matrix appended with another identity matrix
+        weight = torch.cat((torch.eye(self.in_features), torch.eye(self.in_features)), dim=1)
+
+        self.weight.data = weight.to(device).t()
+        self.bias.data = torch.zeros(self.out_features).to(device)
 
 
 class Square(nn.ReLU, DPBackSubstitution):
