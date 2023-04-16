@@ -22,7 +22,7 @@ class MnistModel(nn.Module):
         self.linear = nn.Linear(hidden_size, out_size).to(dev)
 
     def forward(self, xb):
-        frames = xb.unfold(1, self.frame_size, self.frame_step)
+        frames = xb.unfold(1, self.frame_size, self.frame_step) #segment into input size length frames, total nframes
         frames = frames.transpose(0, 1)
         _, (out, _) = self.lstm(frames)
         out = out[-1]
@@ -42,7 +42,6 @@ class MnistModelDP(MnistModel):
         lstm_pack = []
         feed = []
         dev = input.device
-
         for frame_idx, i in enumerate(range(0, input.lb.size()[0], self.frame_step)):
             if i + self.frame_size > input.lb.size()[0]:
                 break
@@ -92,7 +91,6 @@ class MnistModelDP(MnistModel):
             comp_mtx[fl, 0] = -1
             lin_compare.assign(comp_mtx, device=dev)
             lp_res = lin_compare(lin2_out)
-
             if lp_res.lb[0] > 0:
                 if verbose:
                     print("\tProven.")

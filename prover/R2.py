@@ -8,6 +8,7 @@ from relaxation import bounds as LP_bounds
 from relaxation import ibp_bounds as IBP_bounds
 from relaxation import LB_split, UB_split
 from tqdm import tqdm
+import copy
 
 
 class DeepPoly:
@@ -52,6 +53,7 @@ class DeepPoly:
 
 class DPBackSubstitution:
     def _get_lb(self, expr_w, expr_b):
+        # expr_w are next layer weight
         if len(self.output_dp.lexpr[0].size()) == 2:
             res_w = (
                 positive_only(expr_w) @ self.output_dp.lexpr[0]
@@ -999,7 +1001,264 @@ class Linear(nn.Linear, DPBackSubstitution):
         )
 
         return self.output_dp
-    
+
+
+
+class Convolution_Layer(Linear):
+    def __init__(self, filters, strides, pad,in_features,out_features,prev_layer=None):
+        super(Convolution_Layer, self).__init__(in_features, out_features, True, prev_layer)
+
+    @staticmethod
+    def convert(layer, height, width, prev_layer=None, device=torch.device("cpu")):
+        """
+        Convert a PyTorch conv2d layer to a DeepPoly Linear layer
+
+        Parameters
+        ----------
+        layer : nn.Linear
+            PyTorch Linear layer
+
+        prev_layer : DPBackSubstitution
+            Information about the previous layer
+        """
+
+        # layer.in_channels
+        # layer.out_channels
+        # layer.kernel_size
+        stride=layer.stride
+        pad=layer.padding
+        weight=layer.weight.data.to(device)
+        bias=layer.bias.data.to(device)
+
+        # print(weight.shape,bias.shape)
+        # 28, 28, 1
+        # h,w,channel
+
+        cur_size=(height,width,weight.shape[1])
+        new_size=(int((cur_size[0]-weight.shape[2]+2*pad[0])/stride[0]+1),int((cur_size[1]-weight.shape[3]+2*pad[1])/stride[1]+1),weight.shape[0])
+        flat_inp = np.prod(cur_size)
+        flat_out = np.prod(new_size)
+        W_flat = torch.zeros(flat_inp, flat_out)
+        b_flat = torch.zeros(flat_out)
+
+        m,n,p=cur_size
+        d,e,f=new_size
+
+        #d-height, e-width, f-channel
+
+
+        for x in range(d):
+            for y in range(e):
+                for z in range(f):
+                    b_flat[e * f * x + f * y + z] = bias[z]
+                    for k in range(p):
+                        for idx0 in range(weight.shape[2]):
+                            for idx1 in range(weight.shape[3]):
+                                i = stride[0]*x+idx0-pad[0]
+                                j = stride[1]*y+idx1-pad[1]
+                                if i<0 or j<0 or i>=m or j>=n:
+                                    continue
+                                else:
+                                    W_flat[n * p * i + p * j + k, e * f * x + f * y + z] = weight[z,k,idx0, idx1]
+        # W_flat:[[cc..cc(width)],[cccc],....(height)]
+
+        l = Linear(
+            flat_inp, flat_out, True, prev_layer
+        )
+        l.weight.data = W_flat.T.to(device)
+        l.bias.data = b_flat.to(device)
+
+        return l,d,e
+
+
+class MaxPool(nn.MaxPool2d, DPBackSubstitution):
+    def __init__(self, channel,height,width,out_shape,kernel=(2,2),stride=(2,2), prev_layer=None):
+        super(MaxPool, self).__init__(kernel_size=kernel,stride=stride) #assuming kernel=stride
+        self.prev_layer = prev_layer
+        self.output_dp = None
+        self.kernel=kernel
+        self.stride=stride
+        self.channel=channel
+        self.height=height
+        self.width=width
+        self.out_shape=out_shape
+
+    @staticmethod
+    def convert(layer,channel,h,w, prev_layer=None, device=torch.device("cpu")):
+        if isinstance(layer.kernel_size, int):
+            kernel=(layer.kernel_size,layer.kernel_size)
+        else: kernel=layer.kernel_size
+        if isinstance(layer.stride, int):
+            stride=(layer.stride,layer.stride)
+        else: stride=layer.stride
+        out_shape=(int(((h-kernel[0])/stride[0])+1),
+                   int(((w-kernel[1])/stride[1])+1),
+                   channel)
+        return MaxPool(channel,h,w,out_shape,kernel,stride,prev_layer)
+
+    def forward(self, prev_dp):
+        dim = prev_dp.dim
+        dev = prev_dp.device
+        #input flattened from (h,w,c)
+        out_dim=np.prod(self.out_shape)
+
+        lexpr_w = torch.zeros(dim,out_dim).to(device=dev)
+        lexpr_b = torch.zeros(out_dim).to(device=dev)
+        uexpr_w = torch.zeros(dim,out_dim).to(device=dev)
+        uexpr_b = torch.zeros(out_dim).to(device=dev)
+
+        m,n,p=self.height,self.width,self.channel
+        d,e,f=self.out_shape
+        assert p==f
+
+        for x in range(d):
+            for y in range(e):
+                for z in range(f):
+                    # output position: e * f * x + f * y + z
+                    # input region: n * p * i + p * j + z
+                    #check conditions
+                    tempub={}
+                    templb={}
+                    for idx0 in range(self.kernel[0]):
+                        for idx1 in range(self.kernel[1]):
+                            i=self.stride[0]*x+idx0
+                            j=self.stride[1]*y+idx1
+                            tempub[n*p*i+p*j+z]=prev_dp.ub[n*p*i+p*j+z]
+                            templb[n*p*i+p*j+z]=prev_dp.lb[n*p*i+p*j+z]
+
+                    maxlb=max(templb, key=templb.get)
+                    # maxlb=np.argmax(np.array(templb))
+                    maxub=max(tempub, key=tempub.get)
+                    # maxub=np.argmax(np.array(tempub))
+                    ub=tempub[maxub]
+                    del tempub[maxub]
+                    # tempub[maxlb]=float('-inf')
+                    #case one, just choose the max lb index
+                    if templb[maxlb] > tempub[max(tempub, key=tempub.get)]:
+                        lexpr_w[maxlb,e * f * x + f * y + z]=1
+                        uexpr_w[maxlb,e * f * x + f * y + z]=1
+                    else:
+                        lexpr_w[maxlb,e * f * x + f * y + z]=1
+                        uexpr_b[e * f * x + f * y + z]=ub
+
+        lb = self.prev_layer._get_lb(lexpr_w.T, lexpr_b)
+        ub = self.prev_layer._get_ub(uexpr_w.T, uexpr_b)
+        self.output_dp = DeepPoly(
+            lb=lb,
+            ub=ub,
+            lexpr=(lexpr_w.T, lexpr_b),
+            uexpr=(uexpr_w.T, uexpr_b),
+            device=prev_dp.device,
+        )
+
+        return self.output_dp
+
+
+class BatchNormalization(nn.BatchNorm2d,DPBackSubstitution):
+    """
+    A class for the batch normalization layer that subtracts the mean
+    of a layer (without dividing by the standard deviation)
+    """
+    def __init__(self, in_channel, mean, var, prev_layer=None):
+        super(BatchNormalization, self).__init__(num_features=in_channel)
+        self.in_channel=in_channel
+        self.mean=mean
+        self.var=var
+        self.prev_layer=prev_layer
+
+    @staticmethod
+    def convert(layer, prev_layer=None, device=torch.device("cpu")):
+        return BatchNormalization(layer.num_features,layer.running_mean.data, layer.running_var.data,prev_layer)
+
+
+    def forward(self, prev_dp):
+        """
+        Forward pass of the layer for DeepPoly
+
+        Parameters
+        ----------
+        prev_dp : DeepPoly
+            DeepPoly object of the previous layer
+
+        Returns
+        -------
+        self.output_dp : DeepPoly
+            DeepPoly object of the current layer
+        """
+        dim = prev_dp.dim
+        dev = prev_dp.device
+        # input flattened from (h,w,c)
+        first_dim=int(dim/self.in_channel)
+        lexpr_w = torch.zeros(first_dim,self.in_channel).to(device=dev)
+        lexpr_b = torch.zeros(first_dim,self.in_channel).to(device=dev)
+        # uexpr_w = torch.zeros(first_dim,self.in_channel).to(device=dev)
+        # uexpr_b = torch.zeros(first_dim,self.in_channel).to(device=dev)
+
+        div=1/torch.sqrt(self.var+1e-5)
+        bias = self.mean*div
+        # lexpr_w=torch.reshape(lexpr_w,(int(dim/self.in_channel),self.in_channel))
+        lexpr_w+=div
+        # uexpr_w=torch.reshape(lexpr_w,(int(dim/self.in_channel),self.in_channel))
+        # uexpr_w+=div
+        lexpr_b-=bias
+        # uexpr_b-=bias
+
+        lexpr_w,lexpr_b=lexpr_w.flatten(),lexpr_b.flatten()
+
+        # # layer.num_features=input channels
+        # l = Linear(
+        #     layer.num_features, layer.num_features, True, prev_layer
+        # )
+        # print(layer.running_var,layer.running_mean)
+        # assert layer.num_features==len(layer.running_var)
+        # weight = torch.eye(layer.num_features)/torch.sqrt(torch.add(layer.running_var.data, 1e-5))
+        # bias = layer.running_mean.data/torch.sqrt(layer.running_var.data+1e-5)
+        #
+        # l.weight.data = weight.T.to(device)
+        # l.bias.data = bias.T.to(device)
+
+        lb = self.prev_layer._get_lb(torch.diag(lexpr_w), lexpr_b)
+        ub = self.prev_layer._get_ub(torch.diag(lexpr_w), lexpr_b)
+
+        self.output_dp = DeepPoly(
+            lb=lb,
+            ub=ub,
+            lexpr=(lexpr_w,lexpr_b),
+            uexpr=(lexpr_w,lexpr_b),
+            device=prev_dp.device,
+        )
+
+        return self.output_dp
+
+class Selection(nn.ReLU, DPBackSubstitution):
+    def __init__(self,idx, inplace=False, prev_layer=None):
+        super(Selection, self).__init__(inplace)
+        self.prev_layer = prev_layer
+        self.output_dp = None
+        self.idx=idx
+
+    def forward(self, prev_dp):
+        dim = prev_dp.dim
+        dev = prev_dp.device
+        lexpr_w = torch.zeros(dim,len(self.idx)).to(device=dev)
+        lexpr_b = torch.zeros(len(self.idx)).to(device=dev)
+
+        for i,j in enumerate(self.idx):
+            lexpr_w[j,i]=1
+
+
+
+        lb = self.prev_layer._get_lb(lexpr_w.T, lexpr_b)
+        ub = self.prev_layer._get_ub(lexpr_w.T, lexpr_b)
+        self.output_dp = DeepPoly(
+            lb=lb,
+            ub=ub,
+            lexpr=(lexpr_w.T, lexpr_b),
+            uexpr=(lexpr_w.T, lexpr_b),
+            device=prev_dp.device,
+        )
+
+        return self.output_dp
 
 class Normalization(Linear):
     """
@@ -1009,7 +1268,7 @@ class Normalization(Linear):
     def __init__(self, in_features, prev_layer=None):
         super(Normalization, self).__init__(in_features, in_features, True, prev_layer)
 
-    def assign(self, device=torch.device("cpu")):
+    def assign(self, weight, bias=None, device=torch.device("cpu")):
         """
         Assign weights and bias to the layer
 
@@ -1040,7 +1299,7 @@ class Residual_Connections(Linear):
     def __init__(self, in_features, prev_layer=None):
         super(Residual_Connections, self).__init__(2 * in_features, in_features, True, prev_layer)
 
-    def assign(self, device=torch.device("cpu")):
+    def assign(self, weight, bias=None, device=torch.device("cpu")):
         """
         Assign weights and bias to the layer
 
@@ -1183,6 +1442,8 @@ class ReLU(nn.ReLU, DPBackSubstitution):
 
         lb = self.prev_layer._get_lb(torch.diag(lexpr_w), lexpr_b)
         ub = self.prev_layer._get_ub(torch.diag(uexpr_w), uexpr_b)
+        # lb=torch.zeros(dim).to(device=dev)
+        # ub=torch.zeros(dim).to(device=dev)
         self.output_dp = DeepPoly(
             lb=lb,
             ub=ub,
@@ -1192,6 +1453,7 @@ class ReLU(nn.ReLU, DPBackSubstitution):
         )
 
         return self.output_dp
+
 
 
 class Sigmoidal(nn.Sigmoid, DPBackSubstitution):

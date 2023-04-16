@@ -8,6 +8,7 @@ import os, sys, random
 from models_mnist import MnistModel, MnistModelDP
 from utils import get_default_device
 import argparse
+os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 
 parser = argparse.ArgumentParser(description="MNIST verification")
 parser.add_argument(
@@ -38,24 +39,28 @@ parser.add_argument(
 )
 args = parser.parse_args()
 
+
+args.model_dir='saved/mnist_04f_032h_1l.pt'
+
 nframes = args.nframes
 nhidden = args.nhidden
 nlayers = args.nlayers
 eps = args.eps
-bound_method = args.bound_method
+bound_method = "lp"
 seed = args.seed
 model_name = args.model_dir
 
 inp_size = int(28 * 28 / nframes)
 
 dev = get_default_device()
+print(dev)
 devtxt = "cuda" if dev == torch.device("cuda") else "cpu"
 
 stt_dict = torch.load(model_name, map_location=devtxt)
 
 model = MnistModel(inp_size, nhidden, nlayers, 10).to(dev)
 model.load_state_dict(torch.load(model_name, map_location=devtxt))
-
+print(model)
 r2model = MnistModelDP(inp_size, nhidden, nlayers, 10).to(dev)
 r2model.load_state_dict(torch.load(model_name, map_location=devtxt))
 
@@ -82,7 +87,6 @@ for i in tqdm(range(120)):
         continue
 
     correct += 1
-
     input_dp = R2.DeepPoly.deeppoly_from_perturbation(x.to(dev), eps, truncate=(0, 1))
     st = time.time()
     proven = r2model.certify(input_dp, y, verbose=args.verbose)
