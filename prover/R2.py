@@ -1230,6 +1230,7 @@ class BatchNormalization(nn.BatchNorm2d,DPBackSubstitution):
 
         return self.output_dp
 
+
 class Selection(nn.ReLU, DPBackSubstitution):
     def __init__(self,idx, inplace=False, prev_layer=None):
         super(Selection, self).__init__(inplace)
@@ -1455,7 +1456,6 @@ class ReLU(nn.ReLU, DPBackSubstitution):
         return self.output_dp
 
 
-
 class Sigmoidal(nn.Sigmoid, DPBackSubstitution):
     def __init__(self, func, prev_layer=None):
         if func in ["sigmoid", "tanh"]:
@@ -1500,6 +1500,49 @@ class Sigmoidal(nn.Sigmoid, DPBackSubstitution):
 
         lb = self.prev_layer._get_lb(torch.diag(lexpr_w), lexpr_b)
         ub = self.prev_layer._get_ub(torch.diag(uexpr_w), uexpr_b)
+        self.output_dp = DeepPoly(
+            lb=lb,
+            ub=ub,
+            lexpr=(lexpr_w, lexpr_b),
+            uexpr=(uexpr_w, uexpr_b),
+            device=prev_dp.device,
+        )
+
+        return self.output_dp
+
+
+class exponential(nn.ReLU, DPBackSubstitution):
+    def __init__(self, inplace=False, prev_layer=None):
+        super(ReLU, self).__init__(inplace)
+        self.prev_layer = prev_layer
+        self.output_dp = None
+
+    def forward(self, prev_dp):
+        dim = prev_dp.dim
+        dev = prev_dp.device
+        lexpr_w = torch.zeros(dim).to(device=dev)
+        lexpr_b = torch.zeros(dim).to(device=dev)
+        uexpr_w = torch.zeros(dim).to(device=dev)
+        uexpr_b = torch.zeros(dim).to(device=dev)
+
+        delta = torch.Tensor([1e-2]).to(device=dev)
+
+        # intermediate layer
+        for i in range(dim):
+            l, u = prev_dp.lb[i], prev_dp.ub[i]
+
+            d = torch.min((u + l) / 2, l + 1 - delta)
+
+            lexpr_w[i] = torch.exp(d)
+            lexpr_b[i] = (1-d) * torch.exp(d)
+
+            uexpr_w[i] = (torch.exp(u) - torch.exp(l)) / (u - l)
+            uexpr_b[i] = torch.exp(l) - uexpr_w[i] * l
+
+
+        lb = self.prev_layer._get_lb(torch.diag(lexpr_w), lexpr_b)
+        ub = self.prev_layer._get_ub(torch.diag(uexpr_w), uexpr_b)
+
         self.output_dp = DeepPoly(
             lb=lb,
             ub=ub,
