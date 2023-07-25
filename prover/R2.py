@@ -1261,6 +1261,7 @@ class Selection(nn.ReLU, DPBackSubstitution):
 
         return self.output_dp
 
+
 class Normalization(Linear):
     """
     A class for the normalization layer that subtracts the mean
@@ -1282,6 +1283,63 @@ class Normalization(Linear):
         # create a torch.Tensor of size (in_features, in_features)
         # with all elements equal to identity - 1/in_features
         weight = torch.eye(self.in_features) - torch.ones(self.in_features) / self.in_features
+
+        self.weight.data = weight.to(device).t()
+        self.bias.data = torch.zeros(self.out_features).to(device)
+
+
+class Addition(Linear):
+    """
+    A class for the addition part in the softmax layer
+    """
+    def __init__(self, in_features, prev_layer=None):
+        super(Addition, self).__init__(in_features, int(math.sqrt(in_features)), True, prev_layer)
+
+    def assign(self, weight, bias=None, device=torch.device("cpu")):
+        """
+        Assign weights and bias to the layer
+
+        Parameters
+        ----------
+        device : torch.device
+            Device to which the tensors should be moved
+        """
+
+        # create a torch.Tensor with in_features rows and sqrt(in_features) columns
+        # with all elements equal to 1. Assert that in_features is a perfect square
+        assert int(math.sqrt(self.in_features)) ** 2 == self.in_features, "in_features must be a perfect square"
+        
+        weight = torch.ones(self.in_features, int(math.sqrt(self.in_features))) 
+
+        self.weight.data = weight.to(device).t()
+        self.bias.data = torch.zeros(self.out_features).to(device)
+
+
+class Subtraction(Linear):
+    """
+    A class for the subtraction part in the softmax layer
+    """
+    def __init__(self, in_features, prev_layer=None):
+        super(Subtraction, self).__init__(in_features, in_features**2, True, prev_layer)
+
+    def assign(self, weight, bias=None, device=torch.device("cpu")):
+        """
+        Assign weights and bias to the layer
+
+        Parameters
+        ----------
+        device : torch.device
+            Device to which the tensors should be moved
+        """
+        # create a torch.Tensor with in_features**2 rows and in_features columns
+        # with all elements equal to 0. 
+        weight = torch.zeros(self.in_features**2, self.in_features)
+
+        for i in range(self.in_features):
+            for j in range(self.in_features):
+                weight[i*self.in_features + j, i] = -1
+                weight[i*self.in_features + j, j] = 1            
+            weight[i*self.in_features + i, i] = 0
 
         self.weight.data = weight.to(device).t()
         self.bias.data = torch.zeros(self.out_features).to(device)
@@ -1552,3 +1610,53 @@ class exponential(nn.ReLU, DPBackSubstitution):
         )
 
         return self.output_dp
+
+
+class reciprocal(nn.ReLU, DPBackSubstitution):
+    def __init__(self, inplace=False, prev_layer=None):
+        super(ReLU, self).__init__(inplace)
+        self.prev_layer = prev_layer
+        self.output_dp = None
+
+    def forward(self, prev_dp):
+        dim = prev_dp.dim
+        dev = prev_dp.device
+        lexpr_w = torch.zeros(dim).to(device=dev)
+        lexpr_b = torch.zeros(dim).to(device=dev)
+        uexpr_w = torch.zeros(dim).to(device=dev)
+        uexpr_b = torch.zeros(dim).to(device=dev)
+
+        delta = torch.Tensor([1e-2]).to(device=dev)
+
+        # intermediate layer
+        for i in range(dim):
+            l, u = prev_dp.lb[i], prev_dp.ub[i]
+            assert l>0, "lower bound of reciprocal is not positive"
+
+            def reciprocal(x):
+                return 1/x
+
+            def reciprocal_derivative(x):
+                return -1/(x*x)
+
+            lexpr_w[i] = reciprocal_derivative((u + l) / 2)
+            lexpr_b[i] = -reciprocal_derivative((u + l) / 2) * ((u + l) / 2) + reciprocal((u + l) / 2)
+
+            uexpr_w[i] = (1/u - 1/l) / (u - l)
+            uexpr_b[i] = -l * (1/u - 1/l) / (u - l) + 1/l
+
+
+        lb = self.prev_layer._get_lb(torch.diag(lexpr_w), lexpr_b)
+        ub = self.prev_layer._get_ub(torch.diag(uexpr_w), uexpr_b)
+
+        self.output_dp = DeepPoly(
+            lb=lb,
+            ub=ub,
+            lexpr=(lexpr_w, lexpr_b),
+            uexpr=(uexpr_w, uexpr_b),
+            device=prev_dp.device,
+        )
+
+        return self.output_dp
+
+
