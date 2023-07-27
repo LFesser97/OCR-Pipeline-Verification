@@ -23,11 +23,16 @@ class RawDataset(Dataset):
         self.gt = pd.read_csv(os.path.join(root, 'gt.csv'), header=None)
         self.gt.columns = ['img', 'label']
 
+
+
         out_of_char = f'[^{self.opt.character}]'
         for i in range(len(self.gt)):
             if len(self.gt.loc[i,'label'])<=opt.batch_max_length:
                 self.image_path_list.append(os.path.join(root, self.gt.loc[i,'img']))
-                label = re.sub(out_of_char, '', self.gt.loc[i,'label'])
+                if not self.opt.sensitive:
+                    label = re.sub(out_of_char, '', self.gt.loc[i, 'label'].lower())
+                else:
+                    label = re.sub(out_of_char, '', self.gt.loc[i, 'label'])
                 self.label_list.append(label)
         # self.image_path_list = natsorted(self.image_path_list)
         self.nSamples = len(self.image_path_list)

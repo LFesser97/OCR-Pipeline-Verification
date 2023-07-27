@@ -20,12 +20,12 @@ class DeepPoly:
         assert not torch.isnan(self.lb).any()
         assert not torch.isnan(self.ub).any()
         assert lexpr is None or (
-            (not torch.isnan(self.lexpr[0]).any())
-            and (not torch.isnan(self.lexpr[1]).any())
+                (not torch.isnan(self.lexpr[0]).any())
+                and (not torch.isnan(self.lexpr[1]).any())
         )
         assert uexpr is None or (
-            (not torch.isnan(self.uexpr[0]).any())
-            and (not torch.isnan(self.uexpr[1]).any())
+                (not torch.isnan(self.uexpr[0]).any())
+                and (not torch.isnan(self.uexpr[1]).any())
         )
         self.dim = lb.size()[0]
         self.device = self.lb.device if device is None else device
@@ -52,29 +52,63 @@ class DeepPoly:
 
 
 class DPBackSubstitution:
+    # def _get_lb(self, expr_w, expr_b):
+    #     # expr_w are next layer weight
+    #     prev_layer=self.prev_layer
+    #     cur_dp=self.output_dp
+    #     while prev_layer!= None:
+    #         if len(cur_dp.lexpr[0].size()) == 2:
+    #             res_w = (
+    #                 positive_only(expr_w) @ cur_dp.lexpr[0]
+    #                 + negative_only(expr_w) @ cur_dp.uexpr[0]
+    #             )
+    #         else:
+    #             res_w = (
+    #                 positive_only(expr_w) * cur_dp.lexpr[0]
+    #                 + negative_only(expr_w) * cur_dp.uexpr[0]
+    #             )
+    #         res_b = (
+    #             positive_only(expr_w) @ cur_dp.lexpr[1]
+    #             + negative_only(expr_w) @ cur_dp.uexpr[1]
+    #             + expr_b
+    #         )
+    #         cur_dp=prev_layer.output_dp
+    #         prev_layer=prev_layer.prev_layer
+    #         expr_w=res_w
+    #         expr_b=res_b
+    #
+    #     if prev_layer == None:
+    #         return (
+    #             positive_only(expr_w) @ cur_dp.lb
+    #             + negative_only(expr_w) @ cur_dp.ub
+    #             + expr_b
+    #         )
+    #     # else:
+    #     #     return self.prev_layer._get_lb(res_w, res_b)
+
     def _get_lb(self, expr_w, expr_b):
         # expr_w are next layer weight
         if len(self.output_dp.lexpr[0].size()) == 2:
             res_w = (
-                positive_only(expr_w) @ self.output_dp.lexpr[0]
-                + negative_only(expr_w) @ self.output_dp.uexpr[0]
+                    positive_only(expr_w) @ self.output_dp.lexpr[0]
+                    + negative_only(expr_w) @ self.output_dp.uexpr[0]
             )
         else:
             res_w = (
-                positive_only(expr_w) * self.output_dp.lexpr[0]
-                + negative_only(expr_w) * self.output_dp.uexpr[0]
+                    positive_only(expr_w) * self.output_dp.lexpr[0]
+                    + negative_only(expr_w) * self.output_dp.uexpr[0]
             )
         res_b = (
-            positive_only(expr_w) @ self.output_dp.lexpr[1]
-            + negative_only(expr_w) @ self.output_dp.uexpr[1]
-            + expr_b
+                positive_only(expr_w) @ self.output_dp.lexpr[1]
+                + negative_only(expr_w) @ self.output_dp.uexpr[1]
+                + expr_b
         )
 
         if self.prev_layer == None:
             return (
-                positive_only(res_w) @ self.input_dp.lb
-                + negative_only(res_w) @ self.input_dp.ub
-                + res_b
+                    positive_only(res_w) @ self.input_dp.lb
+                    + negative_only(res_w) @ self.input_dp.ub
+                    + res_b
             )
         else:
             return self.prev_layer._get_lb(res_w, res_b)
@@ -82,25 +116,25 @@ class DPBackSubstitution:
     def _get_ub(self, expr_w, expr_b):
         if len(self.output_dp.lexpr[0].size()) == 2:
             res_w = (
-                positive_only(expr_w) @ self.output_dp.uexpr[0]
-                + negative_only(expr_w) @ self.output_dp.lexpr[0]
+                    positive_only(expr_w) @ self.output_dp.uexpr[0]
+                    + negative_only(expr_w) @ self.output_dp.lexpr[0]
             )
         else:
             res_w = (
-                positive_only(expr_w) * self.output_dp.uexpr[0]
-                + negative_only(expr_w) * self.output_dp.lexpr[0]
+                    positive_only(expr_w) * self.output_dp.uexpr[0]
+                    + negative_only(expr_w) * self.output_dp.lexpr[0]
             )
         res_b = (
-            positive_only(expr_w) @ self.output_dp.uexpr[1]
-            + negative_only(expr_w) @ self.output_dp.lexpr[1]
-            + expr_b
+                positive_only(expr_w) @ self.output_dp.uexpr[1]
+                + negative_only(expr_w) @ self.output_dp.lexpr[1]
+                + expr_b
         )
 
         if self.prev_layer == None:
             return (
-                positive_only(res_w) @ self.input_dp.ub
-                + negative_only(res_w) @ self.input_dp.lb
-                + res_b
+                    positive_only(res_w) @ self.input_dp.ub
+                    + negative_only(res_w) @ self.input_dp.lb
+                    + res_b
             )
         else:
             return self.prev_layer._get_ub(res_w, res_b)
@@ -108,14 +142,14 @@ class DPBackSubstitution:
 
 class LSTMCell(nn.LSTM, DPBackSubstitution):
     def __init__(
-        self,
-        input_size,
-        hidden_size,
-        num_layers=1,
-        prev_layer=None,
-        prev_cell=None,
-        method="opt",
-        device=torch.device("cpu"),
+            self,
+            input_size,
+            hidden_size,
+            num_layers=1,
+            prev_layer=None,
+            prev_cell=None,
+            method="opt",
+            device=torch.device("cpu"),
     ):
         super(LSTMCell, self).__init__(input_size, hidden_size)
         self.num_layers = num_layers
@@ -134,7 +168,7 @@ class LSTMCell(nn.LSTM, DPBackSubstitution):
 
     @staticmethod
     def convert(
-        cell, prev_layer=None, prev_cell=None, method="opt", device=torch.device("cpu")
+            cell, prev_layer=None, prev_cell=None, method="opt", device=torch.device("cpu")
     ):
         lstm = LSTMCell(
             cell.input_size,
@@ -187,8 +221,8 @@ class LSTMCell(nn.LSTM, DPBackSubstitution):
     def set_lambda(self, device=torch.device("cpu")):
         self.lmb = (
             torch.Tensor(2, self.num_layers, 3, self.hidden_size, 5)
-            .to(device)
-            .uniform_(-1, 1)
+                .to(device)
+                .uniform_(-1, 1)
         )
         self.lmb.requires_grad_()
         return self.lmb
@@ -229,20 +263,20 @@ class LSTMCell(nn.LSTM, DPBackSubstitution):
                 l_b, u_b = cell.h_t_lexpr[i][1], cell.h_t_uexpr[i][1]
 
                 weight_map[(i - 1, j, "h")] += (
-                    positive_only(weight_map[(i, j, "h")]) @ l_w_i
-                    + negative_only(weight_map[(i, j, "h")]) @ u_w_i
+                        positive_only(weight_map[(i, j, "h")]) @ l_w_i
+                        + negative_only(weight_map[(i, j, "h")]) @ u_w_i
                 )
                 weight_map[(i, j - 1, "h")] += (
-                    positive_only(weight_map[(i, j, "h")]) @ l_w_h
-                    + negative_only(weight_map[(i, j, "h")]) @ u_w_h
+                        positive_only(weight_map[(i, j, "h")]) @ l_w_h
+                        + negative_only(weight_map[(i, j, "h")]) @ u_w_h
                 )
                 weight_map[(i, j - 1, "c")] += (
-                    positive_only(weight_map[(i, j, "h")]) @ l_w_c
-                    + negative_only(weight_map[(i, j, "h")]) @ u_w_c
+                        positive_only(weight_map[(i, j, "h")]) @ l_w_c
+                        + negative_only(weight_map[(i, j, "h")]) @ u_w_c
                 )
                 bias += (
-                    positive_only(weight_map[(i, j, "h")]) @ l_b
-                    + negative_only(weight_map[(i, j, "h")]) @ u_b
+                        positive_only(weight_map[(i, j, "h")]) @ l_b
+                        + negative_only(weight_map[(i, j, "h")]) @ u_b
                 )
 
                 # update from (i, j, 'c')
@@ -251,20 +285,20 @@ class LSTMCell(nn.LSTM, DPBackSubstitution):
                 l_b, u_b = cell.c_t_lexpr[i][1], cell.c_t_uexpr[i][1]
 
                 weight_map[(i - 1, j, "h")] += (
-                    positive_only(weight_map[(i, j, "c")]) @ l_w_i
-                    + negative_only(weight_map[(i, j, "c")]) @ u_w_i
+                        positive_only(weight_map[(i, j, "c")]) @ l_w_i
+                        + negative_only(weight_map[(i, j, "c")]) @ u_w_i
                 )
                 weight_map[(i, j - 1, "h")] += (
-                    positive_only(weight_map[(i, j, "c")]) @ l_w_h
-                    + negative_only(weight_map[(i, j, "c")]) @ u_w_h
+                        positive_only(weight_map[(i, j, "c")]) @ l_w_h
+                        + negative_only(weight_map[(i, j, "c")]) @ u_w_h
                 )
                 weight_map[(i, j - 1, "c")] += (
-                    positive_only(weight_map[(i, j, "c")]) @ l_w_c
-                    + negative_only(weight_map[(i, j, "c")]) @ u_w_c
+                        positive_only(weight_map[(i, j, "c")]) @ l_w_c
+                        + negative_only(weight_map[(i, j, "c")]) @ u_w_c
                 )
                 bias += (
-                    positive_only(weight_map[(i, j, "c")]) @ l_b
-                    + negative_only(weight_map[(i, j, "c")]) @ u_b
+                        positive_only(weight_map[(i, j, "c")]) @ l_b
+                        + negative_only(weight_map[(i, j, "c")]) @ u_b
                 )
 
             cell = cell.prev_cell
@@ -281,13 +315,13 @@ class LSTMCell(nn.LSTM, DPBackSubstitution):
 
     def _get_lb(self, expr_w, expr_b):
         tmp_w = (
-            positive_only(expr_w) @ self.h_t_dp.lexpr[0]
-            + negative_only(expr_w) @ self.h_t_dp.uexpr[0]
+                positive_only(expr_w) @ self.h_t_dp.lexpr[0]
+                + negative_only(expr_w) @ self.h_t_dp.uexpr[0]
         )
         tmp_b = (
-            positive_only(expr_w) @ self.h_t_dp.lexpr[1]
-            + negative_only(expr_w) @ self.h_t_dp.uexpr[1]
-            + expr_b
+                positive_only(expr_w) @ self.h_t_dp.lexpr[1]
+                + negative_only(expr_w) @ self.h_t_dp.uexpr[1]
+                + expr_b
         )
         expr_w = tmp_w
         expr_b = tmp_b
@@ -335,20 +369,20 @@ class LSTMCell(nn.LSTM, DPBackSubstitution):
                 l_b, u_b = cell.h_t_lexpr[i][1], cell.h_t_uexpr[i][1]
 
                 weight_map[(i - 1, j, "h")] += (
-                    positive_only(weight_map[(i, j, "h")]) @ u_w_i
-                    + negative_only(weight_map[(i, j, "h")]) @ l_w_i
+                        positive_only(weight_map[(i, j, "h")]) @ u_w_i
+                        + negative_only(weight_map[(i, j, "h")]) @ l_w_i
                 )
                 weight_map[(i, j - 1, "h")] += (
-                    positive_only(weight_map[(i, j, "h")]) @ u_w_h
-                    + negative_only(weight_map[(i, j, "h")]) @ l_w_h
+                        positive_only(weight_map[(i, j, "h")]) @ u_w_h
+                        + negative_only(weight_map[(i, j, "h")]) @ l_w_h
                 )
                 weight_map[(i, j - 1, "c")] += (
-                    positive_only(weight_map[(i, j, "h")]) @ u_w_c
-                    + negative_only(weight_map[(i, j, "h")]) @ l_w_c
+                        positive_only(weight_map[(i, j, "h")]) @ u_w_c
+                        + negative_only(weight_map[(i, j, "h")]) @ l_w_c
                 )
                 bias += (
-                    positive_only(weight_map[(i, j, "h")]) @ u_b
-                    + negative_only(weight_map[(i, j, "h")]) @ l_b
+                        positive_only(weight_map[(i, j, "h")]) @ u_b
+                        + negative_only(weight_map[(i, j, "h")]) @ l_b
                 )
 
                 # update from (i, j, 'c')
@@ -357,20 +391,20 @@ class LSTMCell(nn.LSTM, DPBackSubstitution):
                 l_b, u_b = cell.c_t_lexpr[i][1], cell.c_t_uexpr[i][1]
 
                 weight_map[(i - 1, j, "h")] += (
-                    positive_only(weight_map[(i, j, "c")]) @ u_w_i
-                    + negative_only(weight_map[(i, j, "c")]) @ l_w_i
+                        positive_only(weight_map[(i, j, "c")]) @ u_w_i
+                        + negative_only(weight_map[(i, j, "c")]) @ l_w_i
                 )
                 weight_map[(i, j - 1, "h")] += (
-                    positive_only(weight_map[(i, j, "c")]) @ u_w_h
-                    + negative_only(weight_map[(i, j, "c")]) @ l_w_h
+                        positive_only(weight_map[(i, j, "c")]) @ u_w_h
+                        + negative_only(weight_map[(i, j, "c")]) @ l_w_h
                 )
                 weight_map[(i, j - 1, "c")] += (
-                    positive_only(weight_map[(i, j, "c")]) @ u_w_c
-                    + negative_only(weight_map[(i, j, "c")]) @ l_w_c
+                        positive_only(weight_map[(i, j, "c")]) @ u_w_c
+                        + negative_only(weight_map[(i, j, "c")]) @ l_w_c
                 )
                 bias += (
-                    positive_only(weight_map[(i, j, "c")]) @ u_b
-                    + negative_only(weight_map[(i, j, "c")]) @ l_b
+                        positive_only(weight_map[(i, j, "c")]) @ u_b
+                        + negative_only(weight_map[(i, j, "c")]) @ l_b
                 )
 
             cell = cell.prev_cell
@@ -387,13 +421,13 @@ class LSTMCell(nn.LSTM, DPBackSubstitution):
 
     def _get_ub(self, expr_w, expr_b):
         tmp_w = (
-            positive_only(expr_w) @ self.h_t_dp.uexpr[0]
-            + negative_only(expr_w) @ self.h_t_dp.lexpr[0]
+                positive_only(expr_w) @ self.h_t_dp.uexpr[0]
+                + negative_only(expr_w) @ self.h_t_dp.lexpr[0]
         )
         tmp_b = (
-            positive_only(expr_w) @ self.h_t_dp.uexpr[1]
-            + negative_only(expr_w) @ self.h_t_dp.lexpr[1]
-            + expr_b
+                positive_only(expr_w) @ self.h_t_dp.uexpr[1]
+                + negative_only(expr_w) @ self.h_t_dp.lexpr[1]
+                + expr_b
         )
         expr_w = tmp_w
         expr_b = tmp_b
@@ -406,7 +440,7 @@ class LSTMCell(nn.LSTM, DPBackSubstitution):
 
         return self._get_ub_bfs(self.num_layers - 1, w_i, w_h, w_c, expr_b)
 
-    def forward(self, x_t_dp):
+    def forward(self, x_t_dp, init_hidden=None):
         hsize = self.hidden_size
         isize = self.input_size
         dev = x_t_dp.device
@@ -848,26 +882,26 @@ class LSTMCell(nn.LSTM, DPBackSubstitution):
                     Cu = self.precal_bnd[2][5, :, 0]
 
             lexpr_w_h = (
-                torch.diag(Al) @ w_o
-                + torch.diag(positive_only(Bl)) @ lexpr_w_c
-                + torch.diag(negative_only(Bl)) @ uexpr_w_c
+                    torch.diag(Al) @ w_o
+                    + torch.diag(positive_only(Bl)) @ lexpr_w_c
+                    + torch.diag(negative_only(Bl)) @ uexpr_w_c
             )
             lexpr_b_h = (
-                torch.diag(Al) @ b_o
-                + torch.diag(positive_only(Bl)) @ lexpr_b_c
-                + torch.diag(negative_only(Bl)) @ uexpr_b_c
-                + Cl
+                    torch.diag(Al) @ b_o
+                    + torch.diag(positive_only(Bl)) @ lexpr_b_c
+                    + torch.diag(negative_only(Bl)) @ uexpr_b_c
+                    + Cl
             )
             uexpr_w_h = (
-                torch.diag(Au) @ w_o
-                + torch.diag(positive_only(Bu)) @ uexpr_w_c
-                + torch.diag(negative_only(Bu)) @ lexpr_w_c
+                    torch.diag(Au) @ w_o
+                    + torch.diag(positive_only(Bu)) @ uexpr_w_c
+                    + torch.diag(negative_only(Bu)) @ lexpr_w_c
             )
             uexpr_b_h = (
-                torch.diag(Au) @ b_o
-                + torch.diag(positive_only(Bu)) @ uexpr_b_c
-                + torch.diag(negative_only(Bu)) @ lexpr_b_c
-                + Cu
+                    torch.diag(Au) @ b_o
+                    + torch.diag(positive_only(Bu)) @ uexpr_b_c
+                    + torch.diag(negative_only(Bu)) @ lexpr_b_c
+                    + Cu
             )
 
             self.h_t_lexpr.append((lexpr_w_h, lexpr_b_h))
@@ -977,20 +1011,22 @@ class Linear(nn.Linear, DPBackSubstitution):
         if self.prev_layer == None:
             self.input_dp = prev_dp
             lb = (
-                positive_only(self.weight) @ self.input_dp.lb
-                + negative_only(self.weight) @ self.input_dp.ub
-                + self.bias
+                    positive_only(self.weight) @ self.input_dp.lb
+                    + negative_only(self.weight) @ self.input_dp.ub
+                    + self.bias
             )
             ub = (
-                positive_only(self.weight) @ self.input_dp.ub
-                + negative_only(self.weight) @ self.input_dp.lb
-                + self.bias
+                    positive_only(self.weight) @ self.input_dp.ub
+                    + negative_only(self.weight) @ self.input_dp.lb
+                    + self.bias
             )
 
         # Intermediate layer
         else:
             lb = self.prev_layer._get_lb(self.weight, self.bias)
             ub = self.prev_layer._get_ub(self.weight, self.bias)
+            # lb = torch.zeros(prev_dp.dim).to(device=prev_dp.device)
+            # ub = torch.zeros(prev_dp.dim).to(device=prev_dp.device)
 
         self.output_dp = DeepPoly(
             lb=lb,
@@ -1003,9 +1039,8 @@ class Linear(nn.Linear, DPBackSubstitution):
         return self.output_dp
 
 
-
 class Convolution_Layer(Linear):
-    def __init__(self, filters, strides, pad,in_features,out_features,prev_layer=None):
+    def __init__(self, filters, strides, pad, in_features, out_features, prev_layer=None):
         super(Convolution_Layer, self).__init__(in_features, out_features, True, prev_layer)
 
     @staticmethod
@@ -1025,27 +1060,27 @@ class Convolution_Layer(Linear):
         # layer.in_channels
         # layer.out_channels
         # layer.kernel_size
-        stride=layer.stride
-        pad=layer.padding
-        weight=layer.weight.data.to(device)
-        bias=layer.bias.data.to(device)
+        stride = layer.stride
+        pad = layer.padding
+        weight = layer.weight.data.to(device)
+        bias = layer.bias.data.to(device)
 
         # print(weight.shape,bias.shape)
         # 28, 28, 1
         # h,w,channel
 
-        cur_size=(height,width,weight.shape[1])
-        new_size=(int((cur_size[0]-weight.shape[2]+2*pad[0])/stride[0]+1),int((cur_size[1]-weight.shape[3]+2*pad[1])/stride[1]+1),weight.shape[0])
+        cur_size = (height, width, weight.shape[1])
+        new_size = (int((cur_size[0] - weight.shape[2] + 2 * pad[0]) / stride[0] + 1),
+                    int((cur_size[1] - weight.shape[3] + 2 * pad[1]) / stride[1] + 1), weight.shape[0])
         flat_inp = np.prod(cur_size)
         flat_out = np.prod(new_size)
         W_flat = torch.zeros(flat_inp, flat_out)
         b_flat = torch.zeros(flat_out)
 
-        m,n,p=cur_size
-        d,e,f=new_size
+        m, n, p = cur_size
+        d, e, f = new_size
 
-        #d-height, e-width, f-channel
-
+        # d-height, e-width, f-channel
 
         for x in range(d):
             for y in range(e):
@@ -1054,12 +1089,12 @@ class Convolution_Layer(Linear):
                     for k in range(p):
                         for idx0 in range(weight.shape[2]):
                             for idx1 in range(weight.shape[3]):
-                                i = stride[0]*x+idx0-pad[0]
-                                j = stride[1]*y+idx1-pad[1]
-                                if i<0 or j<0 or i>=m or j>=n:
+                                i = stride[0] * x + idx0 - pad[0]
+                                j = stride[1] * y + idx1 - pad[1]
+                                if i < 0 or j < 0 or i >= m or j >= n:
                                     continue
                                 else:
-                                    W_flat[n * p * i + p * j + k, e * f * x + f * y + z] = weight[z,k,idx0, idx1]
+                                    W_flat[n * p * i + p * j + k, e * f * x + f * y + z] = weight[z, k, idx0, idx1]
         # W_flat:[[cc..cc(width)],[cccc],....(height)]
 
         l = Linear(
@@ -1068,81 +1103,87 @@ class Convolution_Layer(Linear):
         l.weight.data = W_flat.T.to(device)
         l.bias.data = b_flat.to(device)
 
-        return l,d,e
+        return l, d, e
 
 
 class MaxPool(nn.MaxPool2d, DPBackSubstitution):
-    def __init__(self, channel,height,width,out_shape,kernel=(2,2),stride=(2,2), prev_layer=None):
-        super(MaxPool, self).__init__(kernel_size=kernel,stride=stride) #assuming kernel=stride
+    def __init__(self, channel, height, width, out_shape, kernel=(2, 2), stride=(2, 2), prev_layer=None):
+        super(MaxPool, self).__init__(kernel_size=kernel, stride=stride)  # assuming kernel=stride
         self.prev_layer = prev_layer
         self.output_dp = None
-        self.kernel=kernel
-        self.stride=stride
-        self.channel=channel
-        self.height=height
-        self.width=width
-        self.out_shape=out_shape
+        self.kernel = kernel
+        self.stride = stride
+        self.channel = channel
+        self.height = height
+        self.width = width
+        self.out_shape = out_shape
 
     @staticmethod
-    def convert(layer,channel,h,w, prev_layer=None, device=torch.device("cpu")):
+    def convert(layer, channel, h, w, prev_layer=None, device=torch.device("cpu")):
         if isinstance(layer.kernel_size, int):
-            kernel=(layer.kernel_size,layer.kernel_size)
-        else: kernel=layer.kernel_size
+            kernel = (layer.kernel_size, layer.kernel_size)
+        else:
+            kernel = layer.kernel_size
         if isinstance(layer.stride, int):
-            stride=(layer.stride,layer.stride)
-        else: stride=layer.stride
-        out_shape=(int(((h-kernel[0])/stride[0])+1),
-                   int(((w-kernel[1])/stride[1])+1),
-                   channel)
-        return MaxPool(channel,h,w,out_shape,kernel,stride,prev_layer)
+            stride = (layer.stride, layer.stride)
+        else:
+            stride = layer.stride
+        out_shape = (int(((h - kernel[0]) / stride[0]) + 1),
+                     int(((w - kernel[1]) / stride[1]) + 1),
+                     channel)
+        return MaxPool(channel, h, w, out_shape, kernel, stride, prev_layer)
 
     def forward(self, prev_dp):
         dim = prev_dp.dim
         dev = prev_dp.device
-        #input flattened from (h,w,c)
-        out_dim=np.prod(self.out_shape)
+        # input flattened from (h,w,c)
+        out_dim = np.prod(self.out_shape)
 
-        lexpr_w = torch.zeros(dim,out_dim).to(device=dev)
+        lexpr_w = torch.zeros(dim, out_dim).to(device=dev)
         lexpr_b = torch.zeros(out_dim).to(device=dev)
-        uexpr_w = torch.zeros(dim,out_dim).to(device=dev)
+        uexpr_w = torch.zeros(dim, out_dim).to(device=dev)
         uexpr_b = torch.zeros(out_dim).to(device=dev)
 
-        m,n,p=self.height,self.width,self.channel
-        d,e,f=self.out_shape
-        assert p==f
+        m, n, p = self.height, self.width, self.channel
+        d, e, f = self.out_shape
+        assert p == f
 
         for x in range(d):
             for y in range(e):
                 for z in range(f):
                     # output position: e * f * x + f * y + z
                     # input region: n * p * i + p * j + z
-                    #check conditions
-                    tempub={}
-                    templb={}
+                    # check conditions
+                    tempub = {}
+                    templb = {}
                     for idx0 in range(self.kernel[0]):
                         for idx1 in range(self.kernel[1]):
-                            i=self.stride[0]*x+idx0
-                            j=self.stride[1]*y+idx1
-                            tempub[n*p*i+p*j+z]=prev_dp.ub[n*p*i+p*j+z]
-                            templb[n*p*i+p*j+z]=prev_dp.lb[n*p*i+p*j+z]
+                            i = self.stride[0] * x + idx0
+                            j = self.stride[1] * y + idx1
+                            tempub[n * p * i + p * j + z] = prev_dp.ub[n * p * i + p * j + z]
+                            templb[n * p * i + p * j + z] = prev_dp.lb[n * p * i + p * j + z]
 
-                    maxlb=max(templb, key=templb.get)
+                    maxlb = max(templb, key=templb.get)
                     # maxlb=np.argmax(np.array(templb))
-                    maxub=max(tempub, key=tempub.get)
+                    maxub = max(tempub, key=tempub.get)
                     # maxub=np.argmax(np.array(tempub))
-                    ub=tempub[maxub]
+                    ub = tempub[maxub]
                     del tempub[maxub]
                     # tempub[maxlb]=float('-inf')
-                    #case one, just choose the max lb index
+                    # case one, just choose the max lb index
                     if templb[maxlb] > tempub[max(tempub, key=tempub.get)]:
-                        lexpr_w[maxlb,e * f * x + f * y + z]=1
-                        uexpr_w[maxlb,e * f * x + f * y + z]=1
+                        lexpr_w[maxlb, e * f * x + f * y + z] = 1
+                        uexpr_w[maxlb, e * f * x + f * y + z] = 1
                     else:
-                        lexpr_w[maxlb,e * f * x + f * y + z]=1
-                        uexpr_b[e * f * x + f * y + z]=ub
+                        lexpr_w[maxlb, e * f * x + f * y + z] = 1
+                        uexpr_b[e * f * x + f * y + z] = ub
 
         lb = self.prev_layer._get_lb(lexpr_w.T, lexpr_b)
         ub = self.prev_layer._get_ub(uexpr_w.T, uexpr_b)
+        # print(lexpr_w.T.shape,self.prev_layer.output_dp.lexpr[0].shape)
+        # lb = torch.zeros(out_dim).to(device=prev_dp.device)
+        # ub = torch.zeros(out_dim).to(device=prev_dp.device)
+
         self.output_dp = DeepPoly(
             lb=lb,
             ub=ub,
@@ -1154,22 +1195,22 @@ class MaxPool(nn.MaxPool2d, DPBackSubstitution):
         return self.output_dp
 
 
-class BatchNormalization(nn.BatchNorm2d,DPBackSubstitution):
+class BatchNormalization(nn.BatchNorm2d, DPBackSubstitution):
     """
     A class for the batch normalization layer that subtracts the mean
     of a layer (without dividing by the standard deviation)
     """
+
     def __init__(self, in_channel, mean, var, prev_layer=None):
         super(BatchNormalization, self).__init__(num_features=in_channel)
-        self.in_channel=in_channel
-        self.mean=mean
-        self.var=var
-        self.prev_layer=prev_layer
+        self.in_channel = in_channel
+        self.mean = mean
+        self.var = var
+        self.prev_layer = prev_layer
 
     @staticmethod
     def convert(layer, prev_layer=None, device=torch.device("cpu")):
-        return BatchNormalization(layer.num_features,layer.running_mean.data, layer.running_var.data,prev_layer)
-
+        return BatchNormalization(layer.num_features, layer.running_mean.data, layer.running_var.data, prev_layer)
 
     def forward(self, prev_dp):
         """
@@ -1188,22 +1229,22 @@ class BatchNormalization(nn.BatchNorm2d,DPBackSubstitution):
         dim = prev_dp.dim
         dev = prev_dp.device
         # input flattened from (h,w,c)
-        first_dim=int(dim/self.in_channel)
-        lexpr_w = torch.zeros(first_dim,self.in_channel).to(device=dev)
-        lexpr_b = torch.zeros(first_dim,self.in_channel).to(device=dev)
+        first_dim = int(dim / self.in_channel)
+        lexpr_w = torch.zeros(first_dim, self.in_channel).to(device=dev)
+        lexpr_b = torch.zeros(first_dim, self.in_channel).to(device=dev)
         # uexpr_w = torch.zeros(first_dim,self.in_channel).to(device=dev)
         # uexpr_b = torch.zeros(first_dim,self.in_channel).to(device=dev)
 
-        div=1/torch.sqrt(self.var+1e-5)
-        bias = self.mean*div
+        div = 1 / torch.sqrt(self.var + 1e-5)
+        bias = self.mean * div
         # lexpr_w=torch.reshape(lexpr_w,(int(dim/self.in_channel),self.in_channel))
-        lexpr_w+=div
+        lexpr_w += div
         # uexpr_w=torch.reshape(lexpr_w,(int(dim/self.in_channel),self.in_channel))
         # uexpr_w+=div
-        lexpr_b-=bias
+        lexpr_b -= bias
         # uexpr_b-=bias
 
-        lexpr_w,lexpr_b=lexpr_w.flatten(),lexpr_b.flatten()
+        lexpr_w, lexpr_b = lexpr_w.flatten(), lexpr_b.flatten()
 
         # # layer.num_features=input channels
         # l = Linear(
@@ -1219,12 +1260,14 @@ class BatchNormalization(nn.BatchNorm2d,DPBackSubstitution):
 
         lb = self.prev_layer._get_lb(torch.diag(lexpr_w), lexpr_b)
         ub = self.prev_layer._get_ub(torch.diag(lexpr_w), lexpr_b)
+        # lb = torch.zeros(prev_dp.dim).to(device=prev_dp.device)
+        # ub = torch.zeros(prev_dp.dim).to(device=prev_dp.device)
 
         self.output_dp = DeepPoly(
             lb=lb,
             ub=ub,
-            lexpr=(lexpr_w,lexpr_b),
-            uexpr=(lexpr_w,lexpr_b),
+            lexpr=(lexpr_w, lexpr_b),
+            uexpr=(lexpr_w, lexpr_b),
             device=prev_dp.device,
         )
 
@@ -1232,25 +1275,25 @@ class BatchNormalization(nn.BatchNorm2d,DPBackSubstitution):
 
 
 class Selection(nn.ReLU, DPBackSubstitution):
-    def __init__(self,idx, inplace=False, prev_layer=None):
-        super(Selection, self).__init__(inplace)
+    def __init__(self, idx, prev_layer=None):
+        super(Selection, self).__init__()
         self.prev_layer = prev_layer
         self.output_dp = None
-        self.idx=idx
+        self.idx = idx
 
     def forward(self, prev_dp):
         dim = prev_dp.dim
         dev = prev_dp.device
-        lexpr_w = torch.zeros(dim,len(self.idx)).to(device=dev)
+        lexpr_w = torch.zeros(dim, len(self.idx)).to(device=dev)
         lexpr_b = torch.zeros(len(self.idx)).to(device=dev)
 
-        for i,j in enumerate(self.idx):
-            lexpr_w[j,i]=1
+        for i, j in enumerate(self.idx):
+            lexpr_w[j, i] = 1
 
-
-
-        lb = self.prev_layer._get_lb(lexpr_w.T, lexpr_b)
-        ub = self.prev_layer._get_ub(lexpr_w.T, lexpr_b)
+        # lb = self.prev_layer._get_lb(lexpr_w.T, lexpr_b)
+        # ub = self.prev_layer._get_ub(lexpr_w.T, lexpr_b)
+        lb = torch.zeros(len(self.idx)).to(device=prev_dp.device)
+        ub = torch.zeros(len(self.idx)).to(device=prev_dp.device)
         self.output_dp = DeepPoly(
             lb=lb,
             ub=ub,
@@ -1262,11 +1305,69 @@ class Selection(nn.ReLU, DPBackSubstitution):
         return self.output_dp
 
 
+# class Add(nn.ReLU,DPBackSubstitution):
+#     def __init__(self, prev_layer=None):
+#         super(Add, self).__init__()
+#         self.prev_layer = prev_layer
+#         self.output_dp = None
+#
+#     def forward(self, prev_dp, add_term):
+#         dim = prev_dp.dim
+#         dev = prev_dp.device
+#         lexpr_w = torch.ones(dim).to(device=dev)
+#         lexpr_b = torch.tensor(add_term).to(device=dev)
+#
+#
+#         lb = self.prev_layer._get_lb(lexpr_w, lexpr_b)
+#         ub = self.prev_layer._get_ub(lexpr_w, lexpr_b)
+#         # lb = torch.zeros(len(self.idx)).to(device=prev_dp.device)
+#         # ub = torch.zeros(len(self.idx)).to(device=prev_dp.device)
+#         self.output_dp = DeepPoly(
+#             lb=lb,
+#             ub=ub,
+#             lexpr=(lexpr_w, lexpr_b),
+#             uexpr=(lexpr_w, lexpr_b),
+#             device=prev_dp.device,
+#         )
+#
+#         return self.output_dp
+
+# class concat(nn.ReLU,DPBackSubstitution):
+#     def __init__(self, prev_layer=None):
+#         super(concat, self).__init__()
+#         self.prev_layer = prev_layer
+#         self.output_dp = None
+#
+#     def forward(self, frames):
+#         for prev_dp in frames:
+#
+#             dim = prev_dp.dim
+#             dev = prev_dp.device
+#             lexpr_w = torch.zeros(dim,len(self.idx)).to(device=dev)
+#             lexpr_b = torch.zeros(len(self.idx)).to(device=dev)
+#
+#
+#
+#         # lb = self.prev_layer._get_lb(lexpr_w.T, lexpr_b)
+#         # ub = self.prev_layer._get_ub(lexpr_w.T, lexpr_b)
+#         lb = torch.zeros(prev_dp.dim).to(device=prev_dp.device)
+#         ub = torch.zeros(prev_dp.dim).to(device=prev_dp.device)
+#         self.output_dp = DeepPoly(
+#             lb=lb,
+#             ub=ub,
+#             lexpr=(lexpr_w.T, lexpr_b),
+#             uexpr=(lexpr_w.T, lexpr_b),
+#             device=prev_dp.device,
+#         )
+#
+#         return self.output_dp
+
 class Normalization(Linear):
     """
     A class for the normalization layer that subtracts the mean
     of a layer (without dividing by the standard deviation)
     """
+
     def __init__(self, in_features, prev_layer=None):
         super(Normalization, self).__init__(in_features, in_features, True, prev_layer)
 
@@ -1292,6 +1393,7 @@ class Addition(Linear):
     """
     A class for the addition part in the softmax layer
     """
+
     def __init__(self, in_features, prev_layer=None):
         super(Addition, self).__init__(in_features, int(math.sqrt(in_features)), True, prev_layer)
 
@@ -1308,8 +1410,8 @@ class Addition(Linear):
         # create a torch.Tensor with in_features rows and sqrt(in_features) columns
         # with all elements equal to 1. Assert that in_features is a perfect square
         assert int(math.sqrt(self.in_features)) ** 2 == self.in_features, "in_features must be a perfect square"
-        
-        weight = torch.ones(self.in_features, int(math.sqrt(self.in_features))) 
+
+        weight = torch.ones(self.in_features, int(math.sqrt(self.in_features)))
 
         self.weight.data = weight.to(device).t()
         self.bias.data = torch.zeros(self.out_features).to(device)
@@ -1319,8 +1421,9 @@ class Subtraction(Linear):
     """
     A class for the subtraction part in the softmax layer
     """
+
     def __init__(self, in_features, prev_layer=None):
-        super(Subtraction, self).__init__(in_features, in_features**2, True, prev_layer)
+        super(Subtraction, self).__init__(in_features, in_features ** 2, True, prev_layer)
 
     def assign(self, weight, bias=None, device=torch.device("cpu")):
         """
@@ -1332,19 +1435,19 @@ class Subtraction(Linear):
             Device to which the tensors should be moved
         """
         # create a torch.Tensor with in_features**2 rows and in_features columns
-        # with all elements equal to 0. 
-        weight = torch.zeros(self.in_features**2, self.in_features)
+        # with all elements equal to 0.
+        weight = torch.zeros(self.in_features ** 2, self.in_features)
 
         for i in range(self.in_features):
             for j in range(self.in_features):
-                weight[i*self.in_features + j, i] = -1
-                weight[i*self.in_features + j, j] = 1            
-            weight[i*self.in_features + i, i] = 0
+                weight[i * self.in_features + j, i] = -1
+                weight[i * self.in_features + j, j] = 1
+            weight[i * self.in_features + i, i] = 0
 
         self.weight.data = weight.to(device).t()
         self.bias.data = torch.zeros(self.out_features).to(device)
 
-    
+
 class Residual_Connections(Linear):
     """
     A class for the residual connections layer that adds the identity matrix
@@ -1355,6 +1458,7 @@ class Residual_Connections(Linear):
     The output of this layer is the element-wise sum of the two vectors
     which is of dimension (in_features)
     """
+
     def __init__(self, in_features, prev_layer=None):
         super(Residual_Connections, self).__init__(2 * in_features, in_features, True, prev_layer)
 
@@ -1367,7 +1471,7 @@ class Residual_Connections(Linear):
         device : torch.device
             Device to which the tensors should be moved
         """
-        
+
         # create a torch.Tensor of size (in_features, 2 x in_features)
         # equal to the identity matrix appended with another identity matrix
         weight = torch.cat((torch.eye(self.in_features), torch.eye(self.in_features)), dim=1)
@@ -1411,8 +1515,10 @@ class Square(nn.ReLU, DPBackSubstitution):
                 lexpr_w[i] = l + u
                 lexpr_b[i] = -(((l + u) / 2) ** 2)
 
-        lb = self.prev_layer._get_lb(torch.diag(lexpr_w), lexpr_b)
-        ub = self.prev_layer._get_ub(torch.diag(uexpr_w), uexpr_b)
+        # lb = self.prev_layer._get_lb(torch.diag(lexpr_w), lexpr_b)
+        # ub = self.prev_layer._get_ub(torch.diag(uexpr_w), uexpr_b)
+        lb = torch.zeros(prev_dp.dim).to(device=prev_dp.device)
+        ub = torch.zeros(prev_dp.dim).to(device=prev_dp.device)
         self.output_dp = DeepPoly(
             lb=lb,
             ub=ub,
@@ -1478,31 +1584,58 @@ class ReLU(nn.ReLU, DPBackSubstitution):
         self.prev_layer = prev_layer
         self.output_dp = None
 
+    def set_alpha(self, prev_dp, device=torch.device("cpu")):
+        dim = prev_dp.dim
+        self.alpha = torch.full((dim,), 0.0).to(device=device)
+        # self.alpha = (
+        #     torch.Tensor(dim)
+        #     .to(device)
+        #     .uniform_(0, 1)
+        # )
+        # prev_dp.lb=self.prev_layer.prev_layer._get_lb(prev_dp.lexpr[0],self.prev_dp.lexpr[1])
+        # prev_dp.ub=self.prev_layer.prev_layer._get_ub(prev_dp.uexpr[0],self.prev_dp.uexpr[1])
+
+        for i in range(dim):
+            l, u = prev_dp.lb[i], prev_dp.ub[i]
+            if l > 0:
+                self.alpha[i] = 1.0
+            elif u < 0:
+                pass
+            else:
+                if -l < u:
+                    self.alpha[i] = 1.0
+        self.alpha.requires_grad_()
+        return self.alpha
+
     def forward(self, prev_dp):
         dim = prev_dp.dim
         dev = prev_dp.device
-        lexpr_w = torch.zeros(dim).to(device=dev)
+        lexpr_w = self.alpha.clone()
         lexpr_b = torch.zeros(dim).to(device=dev)
         uexpr_w = torch.zeros(dim).to(device=dev)
         uexpr_b = torch.zeros(dim).to(device=dev)
+
+        # prev_dp.lb=self.prev_layer.prev_layer._get_lb(prev_dp.lexpr[0],prev_dp.lexpr[1])
+        # prev_dp.ub=self.prev_layer.prev_layer._get_ub(prev_dp.uexpr[0],prev_dp.uexpr[1])
 
         # intermediate layer
         for i in range(dim):
             l, u = prev_dp.lb[i], prev_dp.ub[i]
             if l > 0:
-                lexpr_w[i] = 1
                 uexpr_w[i] = 1
             elif u < 0:
                 pass
             else:
-                lexpr_w[i] = 1 if -l < u else 0
                 uexpr_w[i] = u / (u - l)
                 uexpr_b[i] = -l * u / (u - l)
 
-        lb = self.prev_layer._get_lb(torch.diag(lexpr_w), lexpr_b)
-        ub = self.prev_layer._get_ub(torch.diag(uexpr_w), uexpr_b)
-        # lb=torch.zeros(dim).to(device=dev)
-        # ub=torch.zeros(dim).to(device=dev)
+        # self.alpha=self.alpha.clone().contiguous()
+        # self.alpha.requires_grad_()
+
+        # lb = self.prev_layer._get_lb(torch.diag(lexpr_w), lexpr_b)
+        # ub = self.prev_layer._get_ub(torch.diag(uexpr_w), uexpr_b)
+        lb = torch.zeros(dim).to(device=dev)
+        ub = torch.zeros(dim).to(device=dev)
         self.output_dp = DeepPoly(
             lb=lb,
             ub=ub,
@@ -1556,8 +1689,10 @@ class Sigmoidal(nn.Sigmoid, DPBackSubstitution):
                 uexpr_w[i] = lmb_
                 uexpr_b[i] = su - lmb_ * u
 
-        lb = self.prev_layer._get_lb(torch.diag(lexpr_w), lexpr_b)
-        ub = self.prev_layer._get_ub(torch.diag(uexpr_w), uexpr_b)
+        # lb = self.prev_layer._get_lb(torch.diag(lexpr_w), lexpr_b)
+        # ub = self.prev_layer._get_ub(torch.diag(uexpr_w), uexpr_b)
+        lb = torch.zeros(prev_dp.dim).to(device=prev_dp.device)
+        ub = torch.zeros(prev_dp.dim).to(device=prev_dp.device)
         self.output_dp = DeepPoly(
             lb=lb,
             ub=ub,
@@ -1569,9 +1704,9 @@ class Sigmoidal(nn.Sigmoid, DPBackSubstitution):
         return self.output_dp
 
 
-class exponential(nn.ReLU, DPBackSubstitution):
+class Exponential(nn.ReLU, DPBackSubstitution):
     def __init__(self, inplace=False, prev_layer=None):
-        super(ReLU, self).__init__(inplace)
+        super(Exponential, self).__init__(inplace)
         self.prev_layer = prev_layer
         self.output_dp = None
 
@@ -1592,15 +1727,16 @@ class exponential(nn.ReLU, DPBackSubstitution):
             d = torch.min((u + l) / 2, l + 1 - delta)
 
             lexpr_w[i] = torch.exp(d)
-            lexpr_b[i] = (1-d) * torch.exp(d)
+            lexpr_b[i] = (1 - d) * torch.exp(d)
 
             uexpr_w[i] = (torch.exp(u) - torch.exp(l)) / (u - l)
             uexpr_b[i] = torch.exp(l) - uexpr_w[i] * l
 
-
         lb = self.prev_layer._get_lb(torch.diag(lexpr_w), lexpr_b)
         ub = self.prev_layer._get_ub(torch.diag(uexpr_w), uexpr_b)
 
+        # lb = torch.zeros(prev_dp.dim).to(device=prev_dp.device)
+        # ub = torch.zeros(prev_dp.dim).to(device=prev_dp.device)
         self.output_dp = DeepPoly(
             lb=lb,
             ub=ub,
@@ -1612,9 +1748,9 @@ class exponential(nn.ReLU, DPBackSubstitution):
         return self.output_dp
 
 
-class reciprocal(nn.ReLU, DPBackSubstitution):
-    def __init__(self, inplace=False, prev_layer=None):
-        super(ReLU, self).__init__(inplace)
+class Reciprocal(nn.Sigmoid, DPBackSubstitution):
+    def __init__(self, prev_layer=None):
+        super(Reciprocal, self).__init__()
         self.prev_layer = prev_layer
         self.output_dp = None
 
@@ -1630,33 +1766,70 @@ class reciprocal(nn.ReLU, DPBackSubstitution):
 
         # intermediate layer
         for i in range(dim):
+            # reciprocal
             l, u = prev_dp.lb[i], prev_dp.ub[i]
-            assert l>0, "lower bound of reciprocal is not positive"
+            assert l > 0
+            lmb = (1 / u - 1 / l) / (u - l)
+            uexpr_w[i] = lmb
+            uexpr_b[i] = 1 / l - lmb * l
 
-            def reciprocal(x):
-                return 1/x
-
-            def reciprocal_derivative(x):
-                return -1/(x*x)
-
-            lexpr_w[i] = reciprocal_derivative((u + l) / 2)
-            lexpr_b[i] = -reciprocal_derivative((u + l) / 2) * ((u + l) / 2) + reciprocal((u + l) / 2)
-
-            uexpr_w[i] = (1/u - 1/l) / (u - l)
-            uexpr_b[i] = -l * (1/u - 1/l) / (u - l) + 1/l
-
+            mid = (u + l) / 2
+            grad = -1 / (mid * mid)
+            lexpr_w[i] = grad
+            lexpr_b[i] = (1 / mid) - grad * mid
 
         lb = self.prev_layer._get_lb(torch.diag(lexpr_w), lexpr_b)
         ub = self.prev_layer._get_ub(torch.diag(uexpr_w), uexpr_b)
-
+        # lb = torch.zeros(prev_dp.dim).to(device=prev_dp.device)
+        # ub = torch.zeros(prev_dp.dim).to(device=prev_dp.device)
         self.output_dp = DeepPoly(
             lb=lb,
             ub=ub,
             lexpr=(lexpr_w, lexpr_b),
             uexpr=(uexpr_w, uexpr_b),
-            device=prev_dp.device,
-        )
+            device=prev_dp.device, )
 
         return self.output_dp
 
-
+# class Softmax(nn.Softmax, DPBackSubstitution):
+#     def __init__(self, prev_layer=None):
+#         super(Softmax, self).__init__()
+#         self.prev_layer = prev_layer
+#         self.output_dp = None
+#
+#     def forward(self, prev_dp):
+#         dim = prev_dp.dim
+#         dev = prev_dp.device
+#         lexpr_w = torch.zeros(dim).to(device=dev)
+#         lexpr_b = torch.zeros(dim).to(device=dev)
+#         uexpr_w = torch.zeros(dim).to(device=dev)
+#         uexpr_b = torch.zeros(dim).to(device=dev)
+#
+#         # intermediate layer
+#         for i in range(dim):
+#             # reciprocal
+#             l, u = prev_dp.lb[i], prev_dp.ub[i]
+#             assert l > 0
+#             lmb = (1 / u - 1 / l) / (u - l)
+#             uexpr_w[i] = lmb
+#             uexpr_b[i] = 1 / l - lmb * l
+#
+#             mid = (u + l) / 2
+#             grad = -1 / (mid * mid)
+#             lexpr_w[i] = grad
+#             lexpr_b[i] = (1 / mid) - grad * mid
+#
+#
+#         # lb = self.prev_layer._get_lb(torch.diag(lexpr_w), lexpr_b)
+#         # ub = self.prev_layer._get_ub(torch.diag(uexpr_w), uexpr_b)
+#         lb = torch.zeros(prev_dp.dim).to(device=prev_dp.device)
+#         ub = torch.zeros(prev_dp.dim).to(device=prev_dp.device)
+#         self.output_dp = DeepPoly(
+#             lb=lb,
+#             ub=ub,
+#             lexpr=(lexpr_w, lexpr_b),
+#             uexpr=(uexpr_w, uexpr_b),
+#             device=prev_dp.device,
+#         )
+#
+#         return self.output_dp
