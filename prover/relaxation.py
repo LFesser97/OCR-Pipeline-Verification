@@ -264,8 +264,8 @@ def bounds(lx, ux, ly, uy, tanh=True):
         ly = ly.item()
     if type(uy) is torch.Tensor:
         uy = uy.item()
-    Al, Bl, Cl = LB(lx, ux, ly, uy, tanh)
-    Au, Bu, Cu = UB(lx, ux, ly, uy, tanh)
+    Al, Bl, Cl = LB(lx, ux, ly, uy, tanh,n_samples=100)
+    Au, Bu, Cu = UB(lx, ux, ly, uy, tanh,n_samples=100)
     return Al, Bl, Cl, Au, Bu, Cu
 
 

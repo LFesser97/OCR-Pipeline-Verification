@@ -53,6 +53,7 @@ args = parser.parse_args()
 # args.model_dir='saved/ctc_6432_70acc.pt'
 
 args.model_dir='saved/9_frames.pt'
+# args.model_dir='saved/low_maxpool_9f.pt'
 
 nframes = args.nframes
 nhidden = args.nhidden
@@ -79,7 +80,7 @@ if args.sensitive:
 dev = get_default_device()
 dev="cpu"
 print(dev)
-devtxt = "cuda" if dev == torch.device("cuda") else "cpu"
+# devtxt = "cuda" if dev == torch.device("cuda") else "cpu"
 
 # stt_dict = torch.load(model_name, map_location=devtxt)
 
@@ -146,7 +147,7 @@ for i, (image_tensors, labels) in enumerate(valid_loader):
     # print(input)
     # input=model.FeatureExtraction(image_tensors).squeeze(0).permute(1,2,0).flatten() # feature extractor output
     eps=0.001
-    input_dp = R2.deeppoly_from_perturbation(input.to(dev), eps) # truncate=(-1, 1)
+    input_dp = R2.deeppoly_from_perturbation(input.to(dev), eps,truncate=(-1,1)) # truncate=(-1, 1)
     st = time.time()
     proven = r2model.certify(input_dp, preds_index.squeeze(0), image_tensors,args.batch_max_length,converter,dev,args)
     # proven = True

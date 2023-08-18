@@ -54,7 +54,7 @@ nhidden = args.nhidden
 out_channel = args.out_channels
 input_channel=1
 eps = args.eps
-bound_method = "opt"
+bound_method = "lp"
 seed = args.seed
 model_name = args.model_dir
 
@@ -111,7 +111,8 @@ running_time = 0.0
 converter = AttnLabelConverter(args.character)
 
 for i, (image_tensors, labels) in enumerate(valid_loader):
-# for i in tqdm(range(120)):
+    sys.stdout.flush()
+    # for i in tqdm(range(120)):
     print(f"[Testing Input #{i:03d} ({proven_dp} proven / {correct} correct)]")
     # if i<5:
     #     continue
@@ -159,9 +160,16 @@ for i, (image_tensors, labels) in enumerate(valid_loader):
     correct+=1
 
     # from (c,h,w) to (h,w,c)
-    input=image_tensors.squeeze(0).permute(1,2,0).flatten() # image input
-    # print(input)
-    input=model.FeatureExtraction(image_tensors).squeeze(0).permute(1,2,0).flatten() # feature extractor output
+    # input=image_tensors.squeeze(0).permute(1,2,0).flatten() # image input
+    # print(input.shape)
+    # input=model.FeatureExtraction(image_tensors).squeeze(0).permute(1,2,0).flatten() # feature extractor output
+
+    visual_feature=model.FeatureExtraction(image_tensors)
+    visual_feature = visual_feature.permute(0, 3, 1, 2)
+    visual_feature = visual_feature.squeeze(3)
+    contextual_feature = model.SequenceModeling(visual_feature)
+    input=torch.squeeze(contextual_feature).flatten()
+
     eps=0.001
     input_dp = R2.DeepPoly.deeppoly_from_perturbation(input.to(dev), eps) # truncate=(-1, 1)
     st = time.time()

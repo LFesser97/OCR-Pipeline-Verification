@@ -80,6 +80,38 @@ class VGG_FeatureExtractor_CTC(nn.Module):
     def forward(self, input):
         return self.ConvNet(input)
 
+class VGG_FeatureExtractor_9frames(nn.Module):
+    """ FeatureExtractor of CRNN (https://arxiv.org/pdf/1507.05717.pdf) """
+
+    def __init__(self, input_channel, output_channel=512):
+        super(VGG_FeatureExtractor_9frames, self).__init__()
+        self.output_channel = [int(output_channel / 8), int(output_channel / 4),
+                               int(output_channel / 2), output_channel]  # [8, 16, 32, 64]
+        self.ConvNet = nn.Sequential( #1x20x100
+            nn.Conv2d(input_channel, self.output_channel[1], kernel_size=6, stride=2, padding=0), #16x8x48
+            # nn.MaxPool2d(2,2),  # 16x8x48
+            nn.ReLU(True),
+            nn.Dropout(p=0.2),
+            nn.Conv2d(self.output_channel[1], self.output_channel[2], 4, 2, 1), #32x4x24
+            nn.MaxPool2d((1,2),(1,2)),  # 32x4x12
+            nn.ReLU(True),
+            nn.BatchNorm2d(self.output_channel[2], affine=False),
+            nn.Dropout(p=0.1),
+            nn.Conv2d(self.output_channel[2], self.output_channel[3], 3, 1, 0), #64x2x10
+            # nn.MaxPool2d((2, 2), (2, 2)),  # 64x3x11
+            nn.ReLU(True),
+            nn.Dropout(p=0.2),
+            nn.Conv2d(self.output_channel[3], self.output_channel[3], 3, 1, 1),# 64x2x10
+            nn.ReLU(True),
+            nn.Dropout(p=0.2),
+            nn.Conv2d(self.output_channel[3], self.output_channel[3], 2, 1, 0),# 64x1x9
+            nn.ReLU(True),  # hid*1x9
+            nn.BatchNorm2d(self.output_channel[3],affine=False),
+            nn.Dropout(p=0.2),
+        )
+
+    def forward(self, input):
+        return self.ConvNet(input)
 
 class VGG_FeatureExtractor(nn.Module):
     """ FeatureExtractor of CRNN (https://arxiv.org/pdf/1507.05717.pdf) """
@@ -139,7 +171,7 @@ class OCRModel(nn.Module):
         dev = get_default_device()
 
         self.FeatureExtraction=VGG_FeatureExtractor_short(input_channel,output_channel).to(dev)
-        # self.FeatureExtraction=VGG_FeatureExtractor_CTC(input_channel,output_channel).to(dev)
+        # self.FeatureExtraction=VGG_FeatureExtractor_9frames(input_channel,output_channel).to(dev)
 
         # self.AdaptiveAvgPool = nn.AdaptiveAvgPool2d((None, 1))  # Transform final (imgH/16-1) -> 1
         self.SequenceModeling=LSTM(output_channel,hidden_size,hidden_size)
@@ -159,7 +191,6 @@ class OCRModel(nn.Module):
         # visual_feature = self.AdaptiveAvgPool(visual_feature.permute(0, 3, 1, 2))  # [b, c, h, w] -> [b, w, c, h]
         visual_feature = visual_feature.squeeze(3)
         """ Sequence modeling stage """
-
         # self.rnn.flatten_parameters()
         contextual_feature= self.SequenceModeling(visual_feature)  # batch_size x T x input_size -> batch_size x T x hidden_size
         # recurrent = self.dropout(recurrent)
@@ -228,19 +259,15 @@ class OCRModelDP(OCRModel):
                 if verbose:
                     print('ReLU')
 
-        # print(out.lb,out.ub) # h(1)*w(11)*c(out_channel) flattened
-
         optim = torch.optim.RMSprop(alphas,lr=1)
         # optim = torch.optim.Adam(alphas,lr=0.1)
 
         # lr_fn = lambda e: 100 * 0.98 ** e
         # scheduler = torch.optim.lr_scheduler.LambdaLR(optim, lr_fn)
-        success = False
-
         loss_fn = nn.L1Loss()
         for epoch in range(0):
             optim.zero_grad()
-            loss = loss_fn(out[1]-out[0],torch.zeros(out[0].size()[0]))
+            loss = loss_fn(out[1]-out[0],torch.zeros(out[0].size()[0]).to(dev))
             loss.backward(retain_graph=True)
             # torch.nn.utils.clip_grad_norm_(alphas, 5)
 
@@ -255,7 +282,6 @@ class OCRModelDP(OCRModel):
             out = input
             for layer in layers:
                 out = layer(out)
-
         optim.zero_grad()
 
         for alpha in alphas:
@@ -263,10 +289,17 @@ class OCRModelDP(OCRModel):
 
         out_channel=int(out[0].size()[0]/max_length)
         assert out_channel*max_length==out[0].size()[0]
-        lin1 = R2.Linear(out[0].size()[0], out[0].size()[0])
-        lin1.assign(torch.eye(out[0].size()[0]), device=dev)
-        out = lin1(out)
-        last_layer=lin1
+
+
+        # lin1 = R2.Linear(out[0].size()[0], out[0].size()[0],prev_layer=last_layer)
+        # lin1.assign(torch.eye(out[0].size()[0]), device=dev)
+        # out = lin1(out)
+        # last_layer=lin1
+        # layers.append(lin1)
+
+        # print(loss_fn(out[1]-out[0],torch.zeros(out[0].size()[0]).to(dev)).item())
+        # print(out[0],out[1]) # h(1)*w(11)*c(out_channel) flattened
+
 
         # frames = []
         feed = []
@@ -277,7 +310,6 @@ class OCRModelDP(OCRModel):
             chain = []
             select=R2.Selection([i for i in range(frame_idx*out_channel,(frame_idx+1)*out_channel)],prev_layer=last_layer)
             lstm_in=select(out)
-            print(lstm_in[0].shape)
             # chain.append(select)
             feed.append(lstm_in)
 
@@ -286,6 +318,7 @@ class OCRModelDP(OCRModel):
                 prev_layer=select,
                 prev_cell=None if frame_idx == 0 else lstm_pack[-1],
                 method=self.bound_method,
+                device=dev
             )
             lstm_pack.append(R2lstm)
             lmbs.append(R2lstm.set_lambda(dev))

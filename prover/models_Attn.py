@@ -16,7 +16,7 @@ class VGG_FeatureExtractor_Attn(nn.Module):
             nn.Conv2d(input_channel, self.output_channel[1], kernel_size=5, stride=1, padding=0),  # 16x16x96
             nn.MaxPool2d(2, 2),  # 16x8x48
             nn.ReLU(True),
-            nn.Dropout(p=0.1),
+            # nn.Dropout(p=0.1),
 
             nn.Conv2d(self.output_channel[1], self.output_channel[2], 5, 1, 2),  # 32x8x48
             nn.MaxPool2d(2, 2),  # 32x4x24
@@ -29,17 +29,17 @@ class VGG_FeatureExtractor_Attn(nn.Module):
             nn.ReLU(True),
             nn.Dropout(p=0.1),
 
-            nn.Conv2d(self.output_channel[3], self.output_channel[3], 3, 1, 1),  # 64x2x12
-            nn.ReLU(True),
-            nn.Dropout(p=0.1),
+            # nn.Conv2d(self.output_channel[3], self.output_channel[3], 3, 1, 1),  # 64x2x12
+            # nn.ReLU(True),
+            # nn.Dropout(p=0.1),
 
-            nn.Conv2d(self.output_channel[3], self.output_channel[3], 3, 1, 1),  # 64x2x12
-            nn.ReLU(True),
-            nn.Dropout(p=0.1),
-
-            nn.Conv2d(self.output_channel[3], self.output_channel[3], 3, 1, 1),  # 64x2x12
-            nn.ReLU(True),
-            nn.Dropout(p=0.1),
+            # nn.Conv2d(self.output_channel[3], self.output_channel[3], 3, 1, 1),  # 64x2x12
+            # nn.ReLU(True),
+            # nn.Dropout(p=0.1),
+            #
+            # nn.Conv2d(self.output_channel[3], self.output_channel[3], 3, 1, 1),  # 64x2x12
+            # nn.ReLU(True),
+            # nn.Dropout(p=0.1),
 
             nn.Conv2d(self.output_channel[3], self.output_channel[3], 2, 1, 0),
             nn.ReLU(True),  # hid*1x11
@@ -134,7 +134,6 @@ class Attention(nn.Module):
         output_hiddens = torch.FloatTensor(batch_size, num_steps, self.hidden_size).fill_(0).to(self.dev)
         hidden = (torch.FloatTensor(batch_size, self.hidden_size).fill_(0).to(self.dev),
                   torch.FloatTensor(batch_size, self.hidden_size).fill_(0).to(self.dev))
-
         if is_train:
             for i in range(num_steps):
                 # one-hot vectors for a i-th char. in a batch
@@ -178,7 +177,6 @@ class AttentionCell(nn.Module):
         batch_H_proj = self.i2h(batch_H)
         prev_hidden_proj = self.h2h(prev_hidden[0]).unsqueeze(1)
         e = self.score(torch.tanh(batch_H_proj + prev_hidden_proj))  # batch_size x num_encoder_step * 1
-
         alpha = F.softmax(e, dim=1)
         context = torch.bmm(alpha.permute(0, 2, 1), batch_H).squeeze(1)  # batch_size x num_channel
         concat_context = torch.cat([context, char_onehots], 1)  # batch_size x (num_channel + num_embedding)
@@ -192,10 +190,13 @@ class AttnModel(nn.Module):
         super().__init__()
 
         self.args=args
+        self.hidden_size=hidden_size
+        self.num_classes=num_class
         self.FeatureExtraction=VGG_FeatureExtractor_Attn(input_channel,output_channel).to(args.dev)
 
         # self.AdaptiveAvgPool = nn.AdaptiveAvgPool2d((None, 1))  # Transform final (imgH/16-1) -> 1
         self.SequenceModeling=LSTM(output_channel,hidden_size,hidden_size)
+
 
 
         """ Prediction """
@@ -217,7 +218,6 @@ class AttnModel(nn.Module):
         # self.rnn.flatten_parameters()
         contextual_feature= self.SequenceModeling(visual_feature)  # batch_size x T x input_size -> batch_size x T x hidden_size
         # recurrent = self.dropout(recurrent)
-
         """ Prediction stage """
         # if self.stages['Pred'] == 'CTC':
         #     prediction = self.Prediction(contextual_feature.contiguous())
@@ -238,7 +238,6 @@ class AttnModelDP(AttnModel):
 
     def certify(self, input, gt,image_tensors,max_length, converter, max_iter=100,verbose=False):
         layers = []
-        lstm_pack = []
         dev = input.device
         _,c,h,w=image_tensors.shape
 
@@ -281,140 +280,171 @@ class AttnModelDP(AttnModel):
         # print(out.lb,out.ub) # h(1)*w(11)*c(out_channel) flattened
 
 
-        out_channel=int(out.dim/max_length)
-        assert out_channel*max_length==out.dim
-        lin1 = R2.Linear(out.dim, out.dim)
-        lin1.assign(torch.eye(out.dim), device=dev)
-        out = lin1(out)
-        last_layer=lin1
+        # out_channel=int(out.dim/max_length)
+        # assert out_channel*max_length==out.dim
+        # lin1 = R2.Linear(out.dim, out.dim,prev_layer=last_layer)
+        # lin1.assign(torch.eye(out.dim), device=dev)
+        # out = lin1(out)
+        # last_layer=lin1
+        #
+        # frames = []
+        # feed = []
+        # lstm_layers=[]
+        # lstm_pack = []
+        # for frame_idx in range(max_length):
+        #     print('rnn step',frame_idx)
+        #     chain = []
+        #     select=R2.Selection([i for i in range(frame_idx*out_channel,(frame_idx+1)*out_channel)],prev_layer=last_layer)
+        #     lstm_in=select(out)
+        #     # chain.append(select)
+        #     feed.append(lstm_in)
+        #
+        #     R2lstm = R2.LSTMCell.convert(
+        #         self.SequenceModeling.rnn,
+        #         prev_layer=select,
+        #         prev_cell=None if frame_idx == 0 else lstm_pack[-1],
+        #         method=self.bound_method,
+        #     )
+        #     lstm_pack.append(R2lstm)
+        #     lstm_out = R2lstm(lstm_in)
+        #     frames.append(lstm_out)
+        #     chain.append(R2lstm)
+        #
+        #     lstm_layers.append(chain)
+        #
+        # attn_lb=[]
+        # attn_ub=[]
+        # for lstm_out in frames:
+        #     # print(lstm_out.lb)
+        #     attn_lb.append(lstm_out.lb.detach().numpy())
+        #     attn_ub.append(lstm_out.ub.detach().numpy())
+        # batch_H=R2.DeepPoly(torch.tensor(attn_lb).flatten(), torch.tensor(attn_ub).flatten(), None, None)
 
-        frames = []
-        feed = []
-        lstm_layers=[]
-        all_possible_labels=[]
-        for frame_idx in range(max_length):
-            chain = []
-            select=R2.Selection([i for i in range(frame_idx*out_channel,(frame_idx+1)*out_channel)],prev_layer=last_layer)
-            lstm_in=select(out)
-            # chain.append(select)
-            feed.append(lstm_in)
+        batch_H=input
+        # input batch are flatten
+        print(batch_H.lb.shape,'batchH dim')
 
-            R2lstm = R2.LSTMCell.convert(
-                self.SequenceModeling.rnn,
-                prev_layer=select,
-                prev_cell=None if frame_idx == 0 else lstm_pack[-1],
-                method=self.bound_method,
-            )
-            lstm_pack.append(R2lstm)
-            lstm_out = R2lstm(lstm_in)
-            frames.append(lstm_out)
-            chain.append(R2lstm)
 
-            lstm_layers.append(chain)
-        # append all lstms
+        num_steps = self.args.batch_max_length + 1  # +1 for [s] at end of sentence.
 
-        num_steps = self.argsbatch_max_length + 1  # +1 for [s] at end of sentence.
-
-        prev_hidden = (torch.FloatTensor(1, self.hidden_size).fill_(0).to(dev),
-                  torch.FloatTensor(1, self.hidden_size).fill_(0).to(dev))
+        prev_hidden = torch.FloatTensor(1, self.hidden_size).fill_(0).to(dev)
 
         targets = torch.LongTensor(1).fill_(0).to(dev)  # [GO] token
         probs = torch.FloatTensor(1, num_steps, self.num_classes).fill_(0).to(dev)
 
-        attn_lb=[]
-        attn_ub=[]
-        for lstm_out in frames:
-            attn_lb.append(lstm_out.lb)
-            attn_ub.append(lstm_out.ub)
-        batch_H=R2.DeepPoly(torch.tensor(attn_lb), torch.tensor(attn_ub), None, None)
-
         attn_layers=[]
-        frames = []
-        feed = []
-        lstm_layers=[]
+        lstm_attn=[]
+        lstm_cell_attn=[]
         for step in range(num_steps):
-            char_onehots = self._char_to_onehot(targets, onehot_dim=self.num_classes)
-
-            i2h = R2.Linear.convert(self.Prediction.attention_cell.i2h, prev_layer=None, device=dev)
+            i2h = R2.Linear(batch_H.dim,batch_H.dim)
+            i2h.assign(torch.block_diag(*[self.Prediction.attention_cell.i2h.weight.data.T]*self.args.batch_max_length), device=dev)
             i2h_out = i2h(batch_H)
             attn_layers.append(i2h)
-            # batch_H_proj = self.i2h(batch_H)
-
+            # print(i2h_out.lb)
             # h2h_prev=None
             # h2h = R2.Linear.convert(self.Prediction.attention_cell.h2h, prev_layer=h2h_prev, device=dev)
             # h2h_out = h2h(prev_hidden[0]).unsqueeze(1)
-            h2h_out=self.Prediction.attention_cell.h2h(prev_hidden[0]).unsqueeze(1)
-            # attn_layers.append(h2h)
+            h2h_out=self.Prediction.attention_cell.h2h(prev_hidden).flatten()
+            h2h_out=torch.tensor([h2h_out.detach().numpy()]*11).flatten()
 
-            addition=R2.Add(prev_layer=i2h)
+            # attn_layers.append(h2h)
+            # print(i2h_out.lb.shape,h2h_out.shape,'i2h,h2h')
+
+            addition=R2.AddConstant(prev_layer=i2h)
             add_out=addition(i2h_out,h2h_out)
+            # print(add_out.lb.shape,'addout')
+            # print(add_out.lb)
 
             tanh=R2.Sigmoidal("tanh",prev_layer=addition)
             tanh_out=tanh(add_out)
+            # print(tanh_out.lb.shape,'tanh')
 
-            score=R2.Linear.convert(self.Prediction.attention_cell.score,prev_layer=tanh,device=dev)
+            score=R2.Linear(tanh_out.lb.shape[0],self.args.batch_max_length)
+            score.assign(torch.block_diag(*[self.Prediction.attention_cell.score.weight.data.T]*self.args.batch_max_length), device=dev)
             e=score(tanh_out)
+            # print(e.lb,e.ub,'score')
 
+            # alpha = F.softmax(e, dim=1)
+            minus=R2.SoftmaxSub(prev_layer=score)
+            normalized_e=minus(e)
+            # print(normalized_e.lb,normalized_e.ub,'normalized')
 
-            alpha = F.softmax(e, dim=1)
+            exp=R2.Exponential(prev_layer=minus)
+            exponent=exp(normalized_e)
+            # print(exponent.lb,exponent.ub,'exp')
 
+            addition=R2.SoftmaxAdd(prev_layer=exp)
+            denominator=addition(exponent)
+            # print(denominator.lb,denominator.ub,'demonitor')
 
+            inverse=R2.Reciprocal(prev_layer=addition)
+            alpha=inverse(denominator)
 
-
+            # refine=R2.Refinement(prev_layer=inverse)
+            # alpha=refine(alpha)
+            # print(alpha.lb,alpha.ub)
             # mat mul
-            context = torch.bmm(alpha.permute(0, 2, 1), batch_H).squeeze(1)  # batch_size x num_channel
 
-            concat_context = torch.cat([context, char_onehots], 1)  # batch_size x (num_channel + num_embedding)
+            matmul=R2.MatMul(prev_layer=inverse)
+            matmul.assign(batch_H,reshape=(self.args.batch_max_length,self.hidden_size),device=dev)
+            context=matmul(alpha)
+            # context = torch.bmm(alpha.permute(0, 2, 1), batch_H).squeeze(1)  # batch_size x num_channel
+            # print(context.lb.shape,'context')
+            # concat_context = torch.cat([context, char_onehots], 1)  # batch_size x (num_channel + num_embedding)
 
+            char_onehots = self.Prediction._char_to_onehot(targets, onehot_dim=self.num_classes)
+            cat=R2.CatItem(prev_layer=matmul)
+            concat_context=cat(context,char_onehots.squeeze())
+            # print(concat_context.lb.shape,'concat_context')
 
 
             R2lstm = R2.LSTMCell.convert(
-                self.SequenceModeling.rnn,
-                prev_layer=select,
-                prev_cell=None if step == 0 else lstm_pack[-1],
+                self.Prediction.attention_cell.rnn,
+                prev_layer=cat,
+                prev_cell=None if step == 0 else lstm_cell_attn[-1],
                 method=self.bound_method,
             )
-            lstm_pack.append(R2lstm)
+            lstm_cell_attn.append(R2lstm)
             lstm_out = R2lstm(concat_context)
-            # frames.append(lstm_out)
-            chain.append(R2lstm)
+            # print(lstm_out.lb)
+            # lstm_attn.append(R2lstm)
             # lstm_out is hidden state value
 
-            cur_hidden = self.rnn(concat_context, prev_hidden)
-            prev_hidden=cur_hidden
+            # cur_hidden = self.rnn(concat_context, prev_hidden)
+            # prev_hidden=cur_hidden
 
-            generator=R2.linear.convert(self.Prediction.generator,prev_layer=...,device=dev)
+            generator=R2.Linear.convert(self.Prediction.generator,prev_layer=R2lstm,device=dev)
             probs_step=generator(lstm_out)
+            # print(probs_step.lb)
+            # print(gt)
+            num_class=probs_step.dim
 
-            _, next_input = probs_step.max(1)
-            targets = next_input
+            lin_compare = R2.Linear(num_class, 1, prev_layer=generator)
 
-
-
+            frame_label=gt[step]
+            targets=torch.tensor([frame_label])
+            prev_hidden=(lstm_out.ub+lstm_out.lb)/2
+            # print(lstm_out.ub-lstm_out.lb)
             possible_labels=[]
-            frame_label=gt[frame_idx]
-            for fl in range(out_dim):  # false label
-                if len(possible_labels)>2:
-                    return False
-
+            for fl in range(num_class):  # false label
                 if fl == frame_label:
                     continue
                 # if verbose:
                 #     print(f"Testing label {fl} | ground truth {frame_label}")
 
-                comp_mtx = torch.zeros(out_dim, 1)
+                comp_mtx = torch.zeros(num_class, 1)
                 comp_mtx[frame_label, 0] = 1
                 comp_mtx[fl, 0] = -1
                 lin_compare.assign(comp_mtx, device=dev)
-                lp_res = lin_compare(lin_out)
+                lp_res = lin_compare(probs_step)
 
                 if lp_res.lb[0] > 0:
                     # if verbose:
-                    #     print("\tProven.")
+                    #     print("\tProven.",fl)
                     continue
                 elif self.bound_method != "opt":
                     if verbose:
-                        print("\tChange of class",lp_res.lb[0])
+                        print("\tChange of class",fl,lp_res.lb[0])
                     possible_labels.append(fl)
                 elif self.bound_method == "opt":
                     # if lp_res.lb[0]<-15:
@@ -422,16 +452,15 @@ class AttnModelDP(AttnModel):
                     #         print("\tChange of class", lp_res.lb[0])
                     #     possible_labels.append(fl)
                     #     continue
-                    cuda_dev='cuda'
-                    st_time = time.time()
+
                     lmbs = []
-                    for layer in lstm_pack:
+                    for layer in lstm_cell_attn:
                         if hasattr(layer, "lmb"):
                             lmbs.append(layer.set_lambda(dev))
 
                     optim = torch.optim.Adam(lmbs,lr=0.005)
-                    lr_fn = lambda e: 100 * 0.98 ** e
-                    scheduler = torch.optim.lr_scheduler.LambdaLR(optim, lr_fn)
+                    # lr_fn = lambda e: 100 * 0.98 ** e
+                    # scheduler = torch.optim.lr_scheduler.LambdaLR(optim, lr_fn)
                     success = False
 
                     # for inp in feed:
@@ -457,31 +486,15 @@ class AttnModelDP(AttnModel):
                         loss.backward(retain_graph=True)
                         optim.step()
                         optim.zero_grad()
-                        scheduler.step()
+                        # scheduler.step()
 
                     if not success:
                         possible_labels.append(fl)
 
             print("correct: ",frame_label,"miss:", possible_labels)
-            if len(possible_labels)>2:
+            if frame_label==1 and len(possible_labels)==0:
+                return True
+            elif len(possible_labels)>0:
                 return False
-            else:
-                all_possible_labels.append(possible_labels)
 
-        print('all possible labels',all_possible_labels)
-        size=torch.IntTensor([len(gt)] * 1)
-        manipulated=[gt]
-        true_word=converter.decode(gt.unsqueeze(0),size)
-        for i,labels in enumerate(all_possible_labels):
-            temp=[]
-            for l in labels:
-                for preds in manipulated:
-                    new=preds.detach().clone()
-                    new[i]=l
-                    preds_word = converter.decode(new.unsqueeze(0), size)
-                    # print(preds_word,true_word)
-                    if preds_word!=true_word:
-                        return False
-                    temp.append(new)
-            manipulated+=temp
         return True

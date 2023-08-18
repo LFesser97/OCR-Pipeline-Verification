@@ -11,7 +11,6 @@ from tqdm import tqdm
 import copy
 
 
-
 def deeppoly_from_perturbation(x, eps, truncate=None):
     assert eps >= 0, "epsilon must not be negative value"
     if truncate is not None:
@@ -27,10 +26,9 @@ def deeppoly_from_perturbation(x, eps, truncate=None):
 
 
 class DPBackSubstitution:
-
-
     def _get_lb(self, expr_w, expr_b):
         # expr_w are next layer weight
+        # print(expr_w.shape,expr_w.get_device(),self.lexpr[0].shape,self.lexpr[0].get_device(),'back')
         if len(self.lexpr[0].size()) == 2:
             res_w = (
                 positive_only(expr_w) @ self.lexpr[0]
@@ -961,11 +959,13 @@ class Linear(nn.Linear, DPBackSubstitution):
                 + negative_only(self.weight) @ self.input_dp[1]
                 + self.bias
             )
+
             ub = (
                 positive_only(self.weight) @ self.input_dp[1]
                 + negative_only(self.weight) @ self.input_dp[0]
                 + self.bias
             )
+
 
         # Intermediate layer
         else:
@@ -1199,7 +1199,7 @@ class BatchNormalization(nn.BatchNorm2d,DPBackSubstitution):
 
     @staticmethod
     def convert(layer, prev_layer=None, device=torch.device("cpu")):
-        return BatchNormalization(layer.num_features,layer.running_mean.data, layer.running_var.data,prev_layer)
+        return BatchNormalization(layer.num_features,layer.running_mean.data, layer.running_var.data,prev_layer,device)
 
 
     def forward(self, prev_dp):
@@ -1227,10 +1227,10 @@ class BatchNormalization(nn.BatchNorm2d,DPBackSubstitution):
         div=1/torch.sqrt(self.var+1e-5)
         bias = self.mean*div
         # lexpr_w=torch.reshape(lexpr_w,(int(dim/self.in_channel),self.in_channel))
-        lexpr_w+=div
+        lexpr_w+=div.to(self.dev)
         # uexpr_w=torch.reshape(lexpr_w,(int(dim/self.in_channel),self.in_channel))
         # uexpr_w+=div
-        lexpr_b-=bias
+        lexpr_b-=bias.to(self.dev)
         # uexpr_b-=bias
 
         lexpr_w,lexpr_b=lexpr_w.flatten(),lexpr_b.flatten()
@@ -1248,6 +1248,8 @@ class BatchNormalization(nn.BatchNorm2d,DPBackSubstitution):
         # l.bias.data = bias.T.to(device)
 
 
+        # lb = self.prev_layer._get_lb(lexpr_w, lexpr_b)
+        # ub = self.prev_layer._get_ub(lexpr_w, lexpr_b)
         lb = self.prev_layer._get_lb(torch.diag(lexpr_w), lexpr_b)
         ub = self.prev_layer._get_ub(torch.diag(lexpr_w), lexpr_b)
         # lb = torch.zeros(prev_dp.dim).to(device=prev_dp.device)
@@ -1276,11 +1278,10 @@ class Selection(nn.ReLU,DPBackSubstitution):
             lexpr_w[j,i]=1
 
 
-        # lb = self.prev_layer._get_lb(lexpr_w.T, lexpr_b)
-        # ub = self.prev_layer._get_ub(lexpr_w.T, lexpr_b)
-        lb = torch.zeros(len(self.idx)).to(device=self.dev)
-        ub = torch.zeros(len(self.idx)).to(device=self.dev)
-
+        lb = self.prev_layer._get_lb(lexpr_w.T, lexpr_b)
+        ub = self.prev_layer._get_ub(lexpr_w.T, lexpr_b)
+        # lb = torch.zeros(len(self.idx)).to(device=self.dev)
+        # ub = torch.zeros(len(self.idx)).to(device=self.dev)
 
 
         self.lexpr = (lexpr_w.T, lexpr_b)
@@ -1688,40 +1689,5 @@ class Reciprocal(nn.Sigmoid, DPBackSubstitution):
         ub = torch.zeros(dim).to(device=self.dev)
         self.lexpr = (lexpr_w, lexpr_b)
         self.uexpr = (uexpr_w, uexpr_b)
-
-        return lb, ub
-
-
-class Sum(nn.Softmax,DPBackSubstitution):
-    def __init__(self, prev_layer=None,device=torch.device("cpu")):
-        super(Sum, self).__init__()
-        self.prev_layer = prev_layer
-        self.output_dp = None
-        self.dev=device
-
-class Softmax(nn.Softmax, DPBackSubstitution):
-    def __init__(self, prev_layer=None,device=torch.device("cpu")):
-        super(Softmax, self).__init__()
-        self.prev_layer = prev_layer
-        self.output_dp = None
-        self.dev=device
-        self.exp=Exponential(prev_layer=prev_layer)
-
-
-    def forward(self, prev_dp):
-
-        shift = h_U.max(dim=self.axis, keepdim=True).values
-        exp_L, exp_U = torch.exp(h_L - shift), torch.exp(h_U - shift)
-        lower = exp_L / (torch.sum(exp_U, dim=self.axis, keepdim=True) - exp_U + exp_L + epsilon)
-        upper = exp_U / (torch.sum(exp_L, dim=self.axis, keepdim=True) - exp_L + exp_U + epsilon)
-
-        # exp(x-max(x)) before division
-
-        lb=prev_dp[0]
-        ub=prev_dp[1]
-
-        shift=ub.max(keepdim=True)
-        self.exp((lb-shift,ub-shift))
-
 
         return lb, ub
