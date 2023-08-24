@@ -2046,10 +2046,10 @@ class ImprovedSoftmax(nn.relu, DPBackSubstitution):
 
         for i in range(dim):
             lexpr_w[i] = _dl_lse_dx1(midpoint, u, l, i) + torch.sum(_dl_lse_dxi(midpoint, u, l, i, j) for j in range(dim) if j != i)
-            lexpr_b[i] = - _dl_lse_dx1(midpoint, u, l, i) - torch.sum(_dl_lse_dxi(midpoint, u, l, i, j) for j in range(dim) if j != i) + _l_lse(midpoint, u, l, i)
+            lexpr_b[i] = - _dl_lse_dx1(midpoint, u, l, i) * midpoint[i] - torch.sum(_dl_lse_dxi(midpoint, u, l, i, j) * midpoint[j] for j in range(dim) if j != i) + _l_lse(midpoint, u, l, i)
 
             uexpr_w[i] = _du_lse_dx1(midpoint, u, l, i) + torch.sum(_du_lse_dxi(midpoint, u, l, i, j) for j in range(dim) if j != i)
-            uexpr_b[i] = - _du_lse_dx1(midpoint, u, l, i) - torch.sum(_du_lse_dxi(midpoint, u, l, i, j) for j in range(dim) if j != i) + _u_lse(midpoint, u, l, i)
+            uexpr_b[i] = - _du_lse_dx1(midpoint, u, l, i) * midpoint[i] - torch.sum(_du_lse_dxi(midpoint, u, l, i, j) * midpoint[j] for j in range(dim) if j != i) + _u_lse(midpoint, u, l, i)
 
         lb = self.prev_layer._get_lb(torch.diag(lexpr_w), lexpr_b)
         ub = self.prev_layer._get_ub(torch.diag(uexpr_w), uexpr_b)
