@@ -2006,6 +2006,7 @@ class ImprovedSoftmax(nn.Sigmoid, DPBackSubstitution):
             uexpr_w[i] = _du_lse_dx1(midpoint, u, l, i) + torch.sum(torch.tensor([_du_lse_dxi(midpoint, u, l, i, j) for j in range(dim) if j != i]))
             uexpr_b[i] = - _du_lse_dx1(midpoint, u, l, i)* midpoint[i] - torch.sum(torch.tensor([_du_lse_dxi(midpoint, u, l, i, j)* midpoint[j] for j in range(dim) if j != i])) + _u_lse(midpoint, u, l, i)
 
+
         lb = self.prev_layer._get_lb(torch.diag(lexpr_w), lexpr_b)
         ub = self.prev_layer._get_ub(torch.diag(uexpr_w), uexpr_b)
 

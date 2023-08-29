@@ -366,33 +366,33 @@ class AttnModelDP(AttnModel):
             e=score(tanh_out)
             # print(e.lb,e.ub,'score')
 
-            #
-            # # naive softmax
-            # minus=R2.SoftmaxSub(prev_layer=score)
-            # normalized_e=minus(e)
-            # # print(normalized_e.lb,normalized_e.ub,'normalized')
-            # exp=R2.Exponential(prev_layer=minus)
-            # exponent=exp(normalized_e)
-            # # print(exponent.lb,exponent.ub,'exp')
-            # addition=R2.SoftmaxAdd(prev_layer=exp)
-            # denominator=addition(exponent)
-            # # print(denominator.lb,denominator.ub,'demonitor')
-            # inverse=R2.Reciprocal(prev_layer=addition)
-            # alpha=inverse(denominator)
-            # last_layer=inverse
+
+            # naive softmax
+            minus=R2.SoftmaxSub(prev_layer=score)
+            normalized_e=minus(e)
+            # print(normalized_e.lb,normalized_e.ub,'normalized')
+            exp=R2.Exponential(prev_layer=minus)
+            exponent=exp(normalized_e)
+            # print(exponent.lb,exponent.ub,'exp')
+            addition=R2.SoftmaxAdd(prev_layer=exp)
+            denominator=addition(exponent)
+            # print(denominator.lb,denominator.ub,'demonitor')
+            inverse=R2.Reciprocal(prev_layer=addition)
+            alpha=inverse(denominator)
+            last_layer=inverse
 
             # improved softmax
             # print(e.lb,all_e[step].flatten(),'match?')
-            softmax=R2.ImprovedSoftmax(prev_layer=score)
-            alpha=softmax(e,all_e[step].flatten())
-            last_layer=softmax
+            # softmax=R2.ImprovedSoftmax(prev_layer=score)
+            # alpha=softmax(e,all_e[step].flatten())
+            # last_layer=softmax
             # print(alpha.lb,alpha.ub)
 
-            # refine=R2.Refinement(prev_layer=inverse)
-            # alpha=refine(alpha)
+            refine=R2.Refinement(prev_layer=inverse)
+            alpha=refine(alpha)
             # print(alpha.lb,alpha.ub)
+
             # mat mul
-
             matmul=R2.MatMul(prev_layer=last_layer)
             matmul.assign(batch_H,reshape=(self.args.batch_max_length,self.hidden_size),device=dev)
             context=matmul(alpha)
