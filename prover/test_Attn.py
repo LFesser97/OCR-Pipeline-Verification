@@ -127,7 +127,7 @@ for i, (image_tensors, labels) in enumerate(valid_loader):
     if 'Attn' in args.prediction:
         text_for_loss, length_for_loss = converter.encode(labels, batch_max_length=args.batch_max_length)
 
-        preds = model(image,text_for_pred, is_train=False)
+        preds,all_e = model(image,text_for_pred, is_train=False)
 
         preds = preds[:, :text_for_loss.shape[1] - 1, :]
 
@@ -169,11 +169,11 @@ for i, (image_tensors, labels) in enumerate(valid_loader):
     visual_feature = visual_feature.squeeze(3)
     contextual_feature = model.SequenceModeling(visual_feature)
     input=torch.squeeze(contextual_feature).flatten()
-
+    print(all_e.shape,'all_e')
     eps=0.001
     input_dp = R2.DeepPoly.deeppoly_from_perturbation(input.to(dev), eps) # truncate=(-1, 1)
     st = time.time()
-    proven = r2model.certify(input_dp, preds_index.squeeze(0), image_tensors,args.batch_max_length,converter,verbose=args.verbose)
+    proven = r2model.certify(input_dp, all_e,preds_index.squeeze(0), image_tensors,args.batch_max_length,converter,verbose=args.verbose)
     ed = time.time()
     # print(ed-st)
     running_time += ed - st

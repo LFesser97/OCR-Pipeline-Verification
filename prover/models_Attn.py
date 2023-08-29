@@ -134,12 +134,14 @@ class Attention(nn.Module):
         output_hiddens = torch.FloatTensor(batch_size, num_steps, self.hidden_size).fill_(0).to(self.dev)
         hidden = (torch.FloatTensor(batch_size, self.hidden_size).fill_(0).to(self.dev),
                   torch.FloatTensor(batch_size, self.hidden_size).fill_(0).to(self.dev))
+        all_e = []
+
         if is_train:
             for i in range(num_steps):
                 # one-hot vectors for a i-th char. in a batch
                 char_onehots = self._char_to_onehot(text[:, i], onehot_dim=self.num_classes)
                 # hidden : decoder's hidden s_{t-1}, batch_H : encoder's hidden H, char_onehots : one-hot(y_{t-1})
-                hidden, alpha = self.attention_cell(hidden, batch_H, char_onehots)
+                hidden, alpha,e = self.attention_cell(hidden, batch_H, char_onehots)
                 output_hiddens[:, i, :] = hidden[0]  # LSTM hidden index (0: hidden, 1: Cell)
 
             output_hiddens=self.dropout(output_hiddens)
@@ -151,13 +153,13 @@ class Attention(nn.Module):
 
             for i in range(num_steps):
                 char_onehots = self._char_to_onehot(targets, onehot_dim=self.num_classes)
-                hidden, alpha = self.attention_cell(hidden, batch_H, char_onehots)
+                hidden, alpha,e = self.attention_cell(hidden, batch_H, char_onehots)
                 probs_step = self.generator(hidden[0])
                 probs[:, i, :] = probs_step
                 _, next_input = probs_step.max(1)
                 targets = next_input
-
-        return probs  # batch_size x num_steps x num_classes
+                all_e.append(e.detach().numpy())
+        return probs,torch.tensor(all_e)  # batch_size x num_steps x num_classes
 
 
 class AttentionCell(nn.Module):
@@ -182,7 +184,7 @@ class AttentionCell(nn.Module):
         concat_context = torch.cat([context, char_onehots], 1)  # batch_size x (num_channel + num_embedding)
         concat_context=self.dropout(concat_context)
         cur_hidden = self.rnn(concat_context, prev_hidden)
-        return cur_hidden, alpha
+        return cur_hidden, alpha,e
 
 
 class AttnModel(nn.Module):
@@ -222,9 +224,9 @@ class AttnModel(nn.Module):
         # if self.stages['Pred'] == 'CTC':
         #     prediction = self.Prediction(contextual_feature.contiguous())
         # else:
-        prediction = self.Prediction(contextual_feature.contiguous(), text, is_train, batch_max_length=self.args.batch_max_length)
+        prediction,all_e = self.Prediction(contextual_feature.contiguous(), text, is_train, batch_max_length=self.args.batch_max_length)
 
-        return prediction
+        return prediction, all_e
 
 
 
@@ -236,7 +238,7 @@ class AttnModelDP(AttnModel):
     def set_bound_method(self, bound_method):
         self.bound_method = bound_method
 
-    def certify(self, input, gt,image_tensors,max_length, converter, max_iter=100,verbose=False):
+    def certify(self, input, all_e, gt,image_tensors,max_length, converter, max_iter=100,verbose=False):
         layers = []
         dev = input.device
         _,c,h,w=image_tensors.shape
@@ -364,28 +366,34 @@ class AttnModelDP(AttnModel):
             e=score(tanh_out)
             # print(e.lb,e.ub,'score')
 
-            # alpha = F.softmax(e, dim=1)
-            minus=R2.SoftmaxSub(prev_layer=score)
-            normalized_e=minus(e)
-            # print(normalized_e.lb,normalized_e.ub,'normalized')
+            #
+            # # naive softmax
+            # minus=R2.SoftmaxSub(prev_layer=score)
+            # normalized_e=minus(e)
+            # # print(normalized_e.lb,normalized_e.ub,'normalized')
+            # exp=R2.Exponential(prev_layer=minus)
+            # exponent=exp(normalized_e)
+            # # print(exponent.lb,exponent.ub,'exp')
+            # addition=R2.SoftmaxAdd(prev_layer=exp)
+            # denominator=addition(exponent)
+            # # print(denominator.lb,denominator.ub,'demonitor')
+            # inverse=R2.Reciprocal(prev_layer=addition)
+            # alpha=inverse(denominator)
+            # last_layer=inverse
 
-            exp=R2.Exponential(prev_layer=minus)
-            exponent=exp(normalized_e)
-            # print(exponent.lb,exponent.ub,'exp')
-
-            addition=R2.SoftmaxAdd(prev_layer=exp)
-            denominator=addition(exponent)
-            # print(denominator.lb,denominator.ub,'demonitor')
-
-            inverse=R2.Reciprocal(prev_layer=addition)
-            alpha=inverse(denominator)
+            # improved softmax
+            # print(e.lb,all_e[step].flatten(),'match?')
+            softmax=R2.ImprovedSoftmax(prev_layer=score)
+            alpha=softmax(e,all_e[step].flatten())
+            last_layer=softmax
+            # print(alpha.lb,alpha.ub)
 
             # refine=R2.Refinement(prev_layer=inverse)
             # alpha=refine(alpha)
             # print(alpha.lb,alpha.ub)
             # mat mul
 
-            matmul=R2.MatMul(prev_layer=inverse)
+            matmul=R2.MatMul(prev_layer=last_layer)
             matmul.assign(batch_H,reshape=(self.args.batch_max_length,self.hidden_size),device=dev)
             context=matmul(alpha)
             # context = torch.bmm(alpha.permute(0, 2, 1), batch_H).squeeze(1)  # batch_size x num_channel

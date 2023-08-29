@@ -1980,54 +1980,9 @@ class Flatten(nn.Sigmoid, DPBackSubstitution):
 
 
 
-
-
-class ImpSoftmax(nn.Softmax, DPBackSubstitution):
+class ImprovedSoftmax(nn.Sigmoid, DPBackSubstitution):
     def __init__(self, prev_layer=None):
-        super(ImpSoftmax, self).__init__()
-        self.prev_layer = prev_layer
-        self.output_dp = None
-
-    def forward(self, prev_dp):
-        dim = prev_dp.dim
-        dev = prev_dp.device
-        lexpr_w = torch.zeros(dim).to(device=dev)
-        lexpr_b = torch.zeros(dim).to(device=dev)
-        uexpr_w = torch.zeros(dim).to(device=dev)
-        uexpr_b = torch.zeros(dim).to(device=dev)
-
-        # intermediate layer
-        for i in range(dim):
-            # reciprocal
-            l, u = prev_dp.lb[i], prev_dp.ub[i]
-            assert l > 0
-            lmb = (1 / u - 1 / l) / (u - l)
-            uexpr_w[i] = lmb
-            uexpr_b[i] = 1 / l - lmb * l
-
-            mid = (u + l) / 2
-            grad = -1 / (mid * mid)
-            lexpr_w[i] = grad
-            lexpr_b[i] = (1 / mid) - grad * mid
-
-
-        # lb = self.prev_layer._get_lb(torch.diag(lexpr_w), lexpr_b)
-        # ub = self.prev_layer._get_ub(torch.diag(uexpr_w), uexpr_b)
-        lb = torch.zeros(prev_dp.dim).to(device=prev_dp.device)
-        ub = torch.zeros(prev_dp.dim).to(device=prev_dp.device)
-        self.output_dp = DeepPoly(
-            lb=lb,
-            ub=ub,
-            lexpr=(lexpr_w, lexpr_b),
-            uexpr=(uexpr_w, uexpr_b),
-            device=prev_dp.device,
-        )
-
-        return self.output_dp
-
-class ImprovedSoftmax(nn.relu, DPBackSubstitution):
-    def __init__(self, inplace=False, prev_layer=None):
-        super(ReLU, self).__init__(inplace)
+        super(ImprovedSoftmax, self).__init__()
         self.prev_layer = prev_layer
         self.output_dp = None
 
@@ -2045,11 +2000,11 @@ class ImprovedSoftmax(nn.relu, DPBackSubstitution):
         midpoint = (l + u) / 2
 
         for i in range(dim):
-            lexpr_w[i] = _dl_lse_dx1(midpoint, u, l, i) + torch.sum(_dl_lse_dxi(midpoint, u, l, i, j) for j in range(dim) if j != i)
-            lexpr_b[i] = - _dl_lse_dx1(midpoint, u, l, i) - torch.sum(_dl_lse_dxi(midpoint, u, l, i, j) for j in range(dim) if j != i) + _l_lse(midpoint, u, l, i)
+            lexpr_w[i] = _dl_lse_dx1(midpoint, u, l, i) + torch.sum(torch.tensor([_dl_lse_dxi(midpoint, u, l, i, j) for j in range(dim) if j != i]))
+            lexpr_b[i] = - _dl_lse_dx1(midpoint, u, l, i)* midpoint[i] - torch.sum(torch.tensor([_dl_lse_dxi(midpoint, u, l, i, j)* midpoint[j] for j in range(dim) if j != i])) + _l_lse(midpoint, u, l, i)
 
-            uexpr_w[i] = _du_lse_dx1(midpoint, u, l, i) + torch.sum(_du_lse_dxi(midpoint, u, l, i, j) for j in range(dim) if j != i)
-            uexpr_b[i] = - _du_lse_dx1(midpoint, u, l, i) - torch.sum(_du_lse_dxi(midpoint, u, l, i, j) for j in range(dim) if j != i) + _u_lse(midpoint, u, l, i)
+            uexpr_w[i] = _du_lse_dx1(midpoint, u, l, i) + torch.sum(torch.tensor([_du_lse_dxi(midpoint, u, l, i, j) for j in range(dim) if j != i]))
+            uexpr_b[i] = - _du_lse_dx1(midpoint, u, l, i)* midpoint[i] - torch.sum(torch.tensor([_du_lse_dxi(midpoint, u, l, i, j)* midpoint[j] for j in range(dim) if j != i])) + _u_lse(midpoint, u, l, i)
 
         lb = self.prev_layer._get_lb(torch.diag(lexpr_w), lexpr_b)
         ub = self.prev_layer._get_ub(torch.diag(uexpr_w), uexpr_b)
@@ -2098,7 +2053,7 @@ def _sum_exp(x: torch.Tensor) -> torch.Tensor:
 
 
 def _sum_exp_bar(x: torch.Tensor, u: torch.Tensor, l: torch.Tensor) -> torch.Tensor:
-    sum_exp_bar = torch.sum([(u[j] - x[j])/(u[j] - l[j]) * torch.exp(l[j]) + (x[j] - l[j])/(u[j] - l[j]) * torch.exp(u[j]) for j in range(len(x))])
+    sum_exp_bar = torch.sum(torch.tensor([(u[j] - x[j])/(u[j] - l[j]) * torch.exp(l[j]) + (x[j] - l[j])/(u[j] - l[j]) * torch.exp(u[j]) for j in range(len(x))]))
     return sum_exp_bar
 
 
@@ -2108,7 +2063,7 @@ def _log_sum_exp(x: torch.Tensor) -> torch.Tensor:
 
 def _bar(x: torch.Tensor, dim: int) -> torch.Tensor:
     len = x.size()[0]
-    return 1 / (1 + torch.sum([torch.exp(x[j] - x[dim]) for j in range(len) if j != dim]))
+    return 1 / (1 + torch.sum(torch.tensor([torch.exp(x[j] - x[dim]) for j in range(len) if j != dim])))
 
 
 def _l_lse(x: torch.Tensor, u: torch.Tensor, l: torch.Tensor, dim: int) -> torch.Tensor:
